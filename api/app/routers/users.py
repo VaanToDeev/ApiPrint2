@@ -1,4 +1,5 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Form
+from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from typing import List
 from datetime import timedelta
@@ -22,7 +23,10 @@ def create_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
     return crud.create_user(db=db, user=user)
 
 @router.post("/token", response_model=schemas.Token)
-async def login_for_access_token(form_data: auth.OAuth2PasswordBearer = Depends(), db: Session = Depends(get_db)):
+async def login_for_access_token(
+    form_data: OAuth2PasswordRequestForm = Depends(),  # Correto: use OAuth2PasswordRequestForm
+    db: Session = Depends(get_db)
+):
     """Obter token de acesso"""
     user = auth.authenticate_user(db, form_data.username, form_data.password)
     if not user:
