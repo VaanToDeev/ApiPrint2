@@ -1,6 +1,10 @@
 from sqlalchemy.orm import Session
 from fastapi import HTTPException, status
 from . import models, schemas, auth
+from .schemas import UserType
+
+def is_coordenador(user: models.User) -> bool:
+    return user.user_type == models.UserType.COORDENADOR
 
 def get_user(db: Session, user_id: int):
     return db.query(models.User).filter(models.User.id == user_id).first()
@@ -13,6 +17,9 @@ def get_user_by_username(db: Session, username: str):
 
 def get_users(db: Session, skip: int = 0, limit: int = 100):
     return db.query(models.User).offset(skip).limit(limit).all()
+
+def get_users_by_type(db: Session, user_type: UserType, skip: int = 0, limit: int = 100):
+    return db.query(models.User).filter(models.User.user_type == user_type).offset(skip).limit(limit).all()
 
 def create_user(db: Session, user: schemas.UserCreate):
     # Verificar se o e-mail já está em uso
@@ -31,12 +38,24 @@ def create_user(db: Session, user: schemas.UserCreate):
             detail="Nome de usuário já registrado"
         )
     
+    # Verificar se já existe um coordenador (só pode haver um)
+    if user.user_type == UserType.COORDENADOR:
+        existing_coord = db.query(models.User).filter(
+            models.User.user_type == models.UserType.COORDENADOR
+        ).first()
+        if existing_coord:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Já existe um coordenador registrado no sistema"
+        )
+    
     # Criar novo usuário
     hashed_password = auth.get_password_hash(user.password)
     db_user = models.User(
         email=user.email,
         username=user.username,
         full_name=user.full_name,
+        user_type=user.user_type,
         hashed_password=hashed_password
     )
     

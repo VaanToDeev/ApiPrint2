@@ -13,9 +13,9 @@ models.Base.metadata.create_all(bind=engine)
 
 # Inicializar aplicação FastAPI
 app = FastAPI(
-    title="Sistema de Cadastro de Usuários",
-    description="API para gerenciamento de usuários com FastAPI",
-    version="1.0.0"
+    title="Projeto da materia de print 2",
+    description="API para gerenciamento do app",
+    version="1.0.0b"
 )
 
 # Configurar CORS
