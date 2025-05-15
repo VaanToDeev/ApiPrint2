@@ -47,7 +47,7 @@ def create_user(db: Session, user: schemas.UserCreate):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Já existe um coordenador registrado no sistema"
-            )
+        )
     
     # Criar novo usuário
     hashed_password = auth.get_password_hash(user.password)

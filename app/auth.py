@@ -5,12 +5,17 @@ from typing import Optional
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
+import os
+from dotenv import load_dotenv
 
 from .database import get_db
 from . import models, schemas
 
+# Carregar variáveis de ambiente
+load_dotenv()
+
 # Configurações de segurança
-SECRET_KEY = "SUBSTITUA_POR_UMA_CHAVE_SECRETA_COMPLEXA"  # Em produção, use variável de ambiente
+SECRET_KEY = os.getenv("SECRET_KEY", "SUBSTITUA_POR_UMA_CHAVE_SECRETA_COMPLEXA")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 

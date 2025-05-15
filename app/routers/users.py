@@ -3,6 +3,7 @@ from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from typing import List
 from datetime import timedelta
+from pydantic import BaseModel, EmailStr, Field
 
 from .. import crud, models, schemas, auth
 from ..database import get_db, engine
@@ -17,6 +18,19 @@ router = APIRouter(
 
 # Criar tabelas no banco de dados
 models.Base.metadata.create_all(bind=engine)
+
+# Schemas para atualizações específicas
+class PasswordUpdate(BaseModel):
+    current_password: str
+    new_password: str = Field(..., min_length=8)
+
+class EmailUpdate(BaseModel):
+    new_email: EmailStr
+    password: str
+
+class UsernameUpdate(BaseModel):
+    new_username: str = Field(..., min_length=3, max_length=50)
+    password: str
 
 @router.post("/", response_model=schemas.User, status_code=status.HTTP_201_CREATED)
 def create_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
@@ -152,3 +166,80 @@ def delete_user(
         )
     
     return crud.delete_user(db=db, user_id=user_id)
+
+@router.put("/me/password", response_model=schemas.User)
+async def update_password(
+    password_update: PasswordUpdate,
+    current_user: models.User = Depends(auth.get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """Atualizar senha do usuário"""
+    # Verificar senha atual
+    if not auth.verify_password(password_update.current_password, current_user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Senha atual incorreta"
+        )
+    
+    # Atualizar senha
+    return crud.update_user(
+        db=db,
+        user_id=current_user.id,
+        user=schemas.UserUpdate(password=password_update.new_password)
+    )
+
+@router.put("/me/email", response_model=schemas.User)
+async def update_email(
+    email_update: EmailUpdate,
+    current_user: models.User = Depends(auth.get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """Atualizar email do usuário"""
+    # Verificar senha
+    if not auth.verify_password(email_update.password, current_user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Senha incorreta"
+        )
+    
+    # Verificar se o novo email já está em uso
+    if crud.get_user_by_email(db, email=email_update.new_email):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email já está em uso"
+        )
+    
+    # Atualizar email
+    return crud.update_user(
+        db=db,
+        user_id=current_user.id,
+        user=schemas.UserUpdate(email=email_update.new_email)
+    )
+
+@router.put("/me/username", response_model=schemas.User)
+async def update_username(
+    username_update: UsernameUpdate,
+    current_user: models.User = Depends(auth.get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """Atualizar nome de usuário"""
+    # Verificar senha
+    if not auth.verify_password(username_update.password, current_user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Senha incorreta"
+        )
+    
+    # Verificar se o novo username já está em uso
+    if crud.get_user_by_username(db, username=username_update.new_username):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Nome de usuário já está em uso"
+        )
+    
+    # Atualizar username
+    return crud.update_user(
+        db=db,
+        user_id=current_user.id,
+        user=schemas.UserUpdate(username=username_update.new_username)
+    )
