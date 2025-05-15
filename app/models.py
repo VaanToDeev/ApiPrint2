@@ -11,7 +11,8 @@ class User(Base):
     email = Column(String, unique=True, index=True)
     username = Column(String, unique=True, index=True)
     full_name = Column(String)
-    user_type = Column(Enum(UserType), nullable=False)  # Certifique-se de que isso está presente
+    matricula = Column(String(20)) 
+    user_type = Column(Enum(UserType), nullable=False)  
     hashed_password = Column(String)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())

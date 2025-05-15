@@ -56,6 +56,7 @@ def create_user(db: Session, user: schemas.UserCreate):
         username=user.username,
         full_name=user.full_name,
         user_type=user.user_type,
+        matricula=user.matricula,
         hashed_password=hashed_password
     )
     
