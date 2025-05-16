@@ -32,6 +32,11 @@ class UsernameUpdate(BaseModel):
     new_username: str = Field(..., min_length=3, max_length=50)
     password: str
 
+# Schema customizado para login com email
+class EmailPasswordRequestForm(BaseModel):
+    email: EmailStr
+    password: str
+
 @router.post("/", response_model=schemas.User, status_code=status.HTTP_201_CREATED)
 def create_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
     """Cadastrar um novo usuário"""
@@ -72,18 +77,44 @@ async def login_for_access_token(
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: Session = Depends(get_db)
 ):
-    """Obter token de acesso"""
+    """Obter token de acesso usando o formulário OAuth2 padrão.
+    
+    O campo username pode conter um email ou nome de usuário.
+    """
     user = auth.authenticate_user(db, form_data.username, form_data.password)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Nome de usuário ou senha incorretos",
+            detail="Email/usuário ou senha incorretos",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    access_token_expires = timedelta(minutes=auth.ACCESS_TOKEN_EXPIRE_MINUTES)
+    # Usar o email para o token, garantindo consistência
+    access_token = auth.create_access_token(
+        data={"sub": user.email}, expires_delta=access_token_expires
+    )
+    
+    return {"access_token": access_token, "token_type": "bearer"}
+
+@router.post("/login", response_model=schemas.Token)
+async def login_with_email(
+    email: str = Form(...),
+    password: str = Form(...),
+    db: Session = Depends(get_db)
+):
+    """Fazer login usando campos separados para email e senha"""
+    user = auth.authenticate_user(db, email, password)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Email ou senha incorretos",
             headers={"WWW-Authenticate": "Bearer"},
         )
     
     access_token_expires = timedelta(minutes=auth.ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = auth.create_access_token(
-        data={"sub": user.username}, expires_delta=access_token_expires
+        data={"sub": user.email}, expires_delta=access_token_expires
     )
     
     return {"access_token": access_token, "token_type": "bearer"}
