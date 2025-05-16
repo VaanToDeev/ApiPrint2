@@ -23,7 +23,7 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 30
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 # Endpoint para autenticação
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="users/token")
 
 # Funções de utilidade para autenticação
 def verify_password(plain_password, hashed_password):
@@ -32,12 +32,29 @@ def verify_password(plain_password, hashed_password):
 def get_password_hash(password):
     return pwd_context.hash(password)
 
-def authenticate_user(db: Session, username: str, password: str):
-    user = db.query(models.User).filter(models.User.username == username).first()
+def authenticate_user(db: Session, login: str, password: str):
+    """
+    Autentica um usuário pelo email ou username e senha
+    
+    Args:
+        db: Sessão do banco de dados
+        login: Email ou username do usuário
+        password: Senha do usuário
+        
+    Returns:
+        User: O objeto usuário se autenticado ou False se não autenticado
+    """
+    # Tenta encontrar o usuário pelo email
+    user = db.query(models.User).filter(models.User.email == login).first()
+    
+    # Se não encontrar pelo email, tenta pelo username
     if not user:
+        user = db.query(models.User).filter(models.User.username == login).first()
+    
+    # Se não encontrar o usuário ou a senha estiver incorreta, retorna False
+    if not user or not verify_password(password, user.hashed_password):
         return False
-    if not verify_password(password, user.hashed_password):
-        return False
+    
     return user
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
@@ -58,14 +75,19 @@ async def get_current_user(db: Session = Depends(get_db), token: str = Depends(o
     )
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        username: str = payload.get("sub")
-        if username is None:
+        identifier: str = payload.get("sub")
+        if identifier is None:
             raise credentials_exception
-        token_data = schemas.TokenData(username=username)
+        token_data = schemas.TokenData(username=identifier)
     except JWTError:
         raise credentials_exception
     
-    user = db.query(models.User).filter(models.User.username == token_data.username).first()
+    # Verifica se o identificador é um email (contém @)
+    if "@" in identifier:
+        user = db.query(models.User).filter(models.User.email == identifier).first()
+    else:
+        user = db.query(models.User).filter(models.User.username == identifier).first()
+    
     if user is None:
         raise credentials_exception
     return user
