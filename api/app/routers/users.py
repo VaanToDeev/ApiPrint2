@@ -274,3 +274,45 @@ async def update_username(
         user_id=current_user.id,
         user=schemas.UserUpdate(username=username_update.new_username)
     )
+
+@router.get("/alunos/dashboard", response_model=List[schemas.User])
+async def get_aluno_dashboard(
+    current_user: models.User = Depends(auth.get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """Obter dados específicos para o dashboard do aluno"""
+    if current_user.user_type != UserType.ALUNO:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Acesso permitido apenas para alunos"
+        )
+    # Implementar lógica específica para dashboard do aluno
+    return crud.get_aluno_dashboard(db, current_user.id)
+
+@router.get("/professores/dashboard", response_model=List[schemas.User])
+async def get_professor_dashboard(
+    current_user: models.User = Depends(auth.get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """Obter dados específicos para o dashboard do professor"""
+    if current_user.user_type not in [UserType.PROFESSOR, UserType.COORDENADOR]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Acesso permitido apenas para professores"
+        )
+    # Implementar lógica específica para dashboard do professor
+    return crud.get_professor_dashboard(db, current_user.id)
+
+@router.get("/coordenador/dashboard", response_model=List[schemas.User])
+async def get_coordenador_dashboard(
+    current_user: models.User = Depends(auth.get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """Obter dados específicos para o dashboard do coordenador"""
+    if current_user.user_type != UserType.COORDENADOR:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Acesso permitido apenas para coordenadores"
+        )
+    # Implementar lógica específica para dashboard do coordenador
+    return crud.get_coordenador_dashboard(db, current_user.id)
