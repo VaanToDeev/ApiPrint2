@@ -1,0 +1,53 @@
+version: '3.8'
+
+services:
+  db:
+    image: mysql:8.0 # Imagem oficial do MySQL
+    container_name: mysql_db_container
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD} # Pega do .env
+      MYSQL_DATABASE: ${MYSQL_DATABASE}           # Pega do .env
+      MYSQL_USER: ${MYSQL_USER}                   # Pega do .env
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}           # Pega do .env
+    ports:
+      # Mapeia a porta do host para a porta do container.
+      # Alterado para usar a porta 3307 do host para evitar conflito.
+      # Se a variável DB_PORT for definida no .env, ela será usada, senão 3307.
+      - "${DB_PORT:-3307}:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql # Persiste os dados do MySQL
+    healthcheck: # Verifica se o MySQL está pronto antes da API tentar conectar
+      test: ["CMD", "mysqladmin" ,"ping", "-h", "localhost", "-u$$MYSQL_USER", "-p$$MYSQL_PASSWORD"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s # Dá um tempo para o MySQL iniciar completamente
+
+  api:
+    build: . # Constrói a imagem a partir do Dockerfile no diretório atual
+    container_name: fastapi_app_container
+    restart: unless-stopped
+    ports:
+      # Mapeia a porta do host para a porta do container da API.
+      # A variável APP_PORT pode ser definida no .env ou o padrão 8000 será usado.
+      - "${APP_PORT:-8000}:8000"
+    volumes:
+      - ./app:/app/app # Monta o código da sua aplicação no container para live reload
+    environment:
+      DATABASE_URL: mysql+asyncmy://${MYSQL_USER}:${MYSQL_PASSWORD}@db:3306/${MYSQL_DATABASE}
+      SECRET_KEY: ${SECRET_KEY}
+      ALGORITHM: ${ALGORITHM}
+      ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES}
+      INITIAL_ADMIN_NOME: ${INITIAL_ADMIN_NOME}
+      INITIAL_ADMIN_EMAIL: ${INITIAL_ADMIN_EMAIL}
+      INITIAL_ADMIN_SENHA: ${INITIAL_ADMIN_SENHA}
+      INITIAL_ADMIN_SIAPE: ${INITIAL_ADMIN_SIAPE}
+      INITIAL_ADMIN_DEPARTAMENTO: ${INITIAL_ADMIN_DEPARTAMENTO}
+      INITIAL_ADMIN_TITULACAO: ${INITIAL_ADMIN_TITULACAO}
+    depends_on:
+      db: # Garante que o serviço 'db' seja iniciado e esteja saudável antes da 'api'
+        condition: service_healthy
+
+volumes:
+  mysql_data: # Define o volume nomeado para persistência de dados do MySQL
