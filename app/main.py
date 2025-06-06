@@ -5,14 +5,28 @@ from app.database import engine, Base, init_db, AsyncSessionLocal # Alterado get
 from app.routers import auth_router, student_router, professor_router, admin_router
 from app.core.config import settings
 from app import crud, schemas, models # For initial admin creation
+from fastapi.middleware.cors import CORSMiddleware
+
+
+
 
 app = FastAPI(title="Sistema de Gestão Acadêmica API", version="0.1.0")
+
+app.add_middleware(
+       CORSMiddleware,
+       allow_origins=["http://localhost:5173"],  # Frontend origin
+       allow_credentials=True,
+       allow_methods=["*"],
+       allow_headers=["*"],
+   )
+
 
 # Include routers
 app.include_router(auth_router.router)
 app.include_router(student_router.router)
 app.include_router(professor_router.router)
 app.include_router(admin_router.router)
+
 
 
 @app.on_event("startup")

@@ -19,10 +19,11 @@ class UserPublic(BaseModel):
     nome: str
     email: str
     role: str | None = None  # Para professor/admin
+    user_type: str           # "estudante" ou "professor"
 
     class Config:
         orm_mode = True
-        
+
 class UserBase(BaseModel):
     email: EmailStr
     nome: str = Field(..., min_length=3, max_length=100)
