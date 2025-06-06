@@ -13,6 +13,16 @@ class TokenData(BaseModel):
     role: Optional[UserRole] = None # For professors: 'professor', 'coordenador', 'admin'
 
 # Base User Schemas
+
+class UserPublic(BaseModel):
+    id: int
+    nome: str
+    email: str
+    role: str | None = None  # Para professor/admin
+
+    class Config:
+        orm_mode = True
+        
 class UserBase(BaseModel):
     email: EmailStr
     nome: str = Field(..., min_length=3, max_length=100)

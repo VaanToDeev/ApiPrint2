@@ -9,6 +9,19 @@ from datetime import timedelta
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
+@router.get("/me", response_model=schemas.UserPublic)
+async def get_current_user(
+    current_user: models.Professor | models.Estudante = Depends(auth.get_current_active_user)
+):
+    user_type = "professor" if getattr(current_user, "role", None) else "estudante"
+    return {
+        "id": current_user.id,
+        "nome": current_user.nome,
+        "email": current_user.email,
+        "role": getattr(current_user, "role", None),
+        "user_type": user_type
+    }
+
 @router.post("/register/student", response_model=schemas.EstudantePublic, status_code=status.HTTP_201_CREATED)
 async def register_student(
     student_in: schemas.EstudanteCreate, db: AsyncSession = Depends(get_db)

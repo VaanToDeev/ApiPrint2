@@ -7,3 +7,4 @@ passlib[bcrypt]
 python-jose[cryptography]
 asyncmy  # Async MySQL driver
 email-validator # For email validation in Pydantic
+python-multipart
