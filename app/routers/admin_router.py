@@ -76,3 +76,28 @@ async def list_all_cursos(
 ):
     cursos = await crud.get_cursos(db, skip=skip, limit=limit)
     return cursos
+
+@router.put("/cursos/{curso_id}", response_model=schemas.CursoPublic)
+async def update_curso(
+    curso_id: int,
+    curso_in: schemas.CursoCreate,
+    db: AsyncSession = Depends(get_db),
+    current_admin: models.Professor = Depends(auth.get_current_admin_user)
+):
+    db_curso = await crud.get_curso_by_id(db, curso_id)
+    if not db_curso:
+        raise HTTPException(status_code=404, detail="Curso não encontrado.")
+    return await crud.update_curso(db, curso_id, curso_in)
+
+@router.delete("/cursos/{curso_id}", status_code=204)
+async def delete_curso(
+    curso_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_admin: models.Professor = Depends(auth.get_current_admin_user)
+):
+    curso = await crud.get_curso_by_id(db, curso_id)
+    if not curso:
+        raise HTTPException(status_code=404, detail="Curso não encontrado.")
+    await db.delete(curso)
+    await db.commit()
+    return

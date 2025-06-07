@@ -4,6 +4,7 @@ from sqlalchemy.orm import selectinload # For eager loading if needed
 from app import models, schemas
 from app.core.security import get_password_hash
 from typing import Optional, List
+from sqlalchemy.orm import selectinload, joinedload
 
 # --- Estudante CRUD ---
 async def get_estudante_by_email(db: AsyncSession, email: str) -> Optional[models.Estudante]:
@@ -114,3 +115,9 @@ async def assign_coordenador_to_curso(db: AsyncSession, curso_id: int, professor
     await db.commit()
     await db.refresh(db_curso)
     return db_curso
+
+async def get_cursos(db: AsyncSession, skip: int = 0, limit: int = 100):
+    result = await db.execute(
+        select(models.Curso).options(joinedload(models.Curso.coordenador)).offset(skip).limit(limit)
+    )
+    return result.scalars().all()

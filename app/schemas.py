@@ -94,14 +94,13 @@ class CursoBase(BaseModel):
 class CursoCreate(CursoBase):
     pass
 
-class CursoPublic(CursoBase):
+class CursoPublic(BaseModel):
     id_curso: int
-    coordenador_id: Optional[int] = None
-    # Para exibir detalhes do coordenador, se necessário:
-    # coordenador: Optional[ProfessorPublic] = None
+    nome_curso: str
+    coordenador: Optional[ProfessorPublic] = None  # Adicione esta linha
 
     class Config:
-        from_attributes = True
+        orm_mode = True
 
 class CursoUpdate(BaseModel):
     nome_curso: Optional[str] = None
