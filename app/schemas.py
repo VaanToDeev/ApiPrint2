@@ -111,3 +111,41 @@ class CursoUpdate(BaseModel):
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str
+
+
+# TCC Schemas adicionado
+class TCCBase(BaseModel):
+    titulo: str = Field(..., min_length=5, max_length=255)
+    descricao: Optional[str] = Field(None, max_length=1000)
+    ano: int = Field(..., gt=1900, lt=2100) # Assuming a reasonable range for year
+
+class TCCCreate(TCCBase):
+    estudante_id: int
+    orientador_id: int
+
+class TCCPublic(TCCBase):
+    id: int
+    estudante_id: int
+    orientador_id: int
+    # Optionally include full student/orientador objects for more detail
+    # estudante: EstudantePublic
+    # orientador: ProfessorPublic
+
+    class Config:
+        from_attributes = True
+
+# TCC File Schemas
+class TCCFilePublic(BaseModel):
+    id: int
+    tcc_id: int
+    filename: str
+    filepath: str
+    filetype: str
+    upload_date: datetime
+
+    class Config:
+        from_attributes = True
+
+class TCCFileUpload(BaseModel):
+    # This schema is mainly for documentation, actual file comes as UploadFile
+    pass
