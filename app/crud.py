@@ -121,3 +121,9 @@ async def get_cursos(db: AsyncSession, skip: int = 0, limit: int = 100):
         select(models.Curso).options(joinedload(models.Curso.coordenador)).offset(skip).limit(limit)
     )
     return result.scalars().all()
+
+async def get_professores_by_departamento(db: AsyncSession, departamento: str):
+    result = await db.execute(
+        select(models.Professor).where(models.Professor.departamento == departamento)
+    )
+    return result.scalars().all()
