@@ -121,3 +121,46 @@ async def get_cursos(db: AsyncSession, skip: int = 0, limit: int = 100):
         select(models.Curso).options(joinedload(models.Curso.coordenador)).offset(skip).limit(limit)
     )
     return result.scalars().all()
+
+
+# --- TCC CRUD  adicionado ---
+async def create_tcc(db: AsyncSession, tcc_in: schemas.TCCCreate) -> models.TCC:
+    db_tcc = models.TCC(**tcc_in.dict())
+    db.add(db_tcc)
+    await db.commit()
+    await db.refresh(db_tcc)
+    return db_tcc
+
+async def get_tcc_by_id(db: AsyncSession, tcc_id: int) -> Optional[models.TCC]:
+    result = await db.execute(select(models.TCC).filter(models.TCC.id == tcc_id))
+    return result.scalars().first()
+
+async def get_tccs_by_estudante_id(db: AsyncSession, estudante_id: int) -> List[models.TCC]:
+    result = await db.execute(select(models.TCC).filter(models.TCC.estudante_id == estudante_id))
+    return result.scalars().all()
+
+async def get_tccs_by_orientador_id(db: AsyncSession, orientador_id: int) -> List[models.TCC]:
+    result = await db.execute(select(models.TCC).filter(models.TCC.orientador_id == orientador_id))
+    return result.scalars().all()
+
+# --- TCCFile CRUD ---
+async def create_tcc_file(db: AsyncSession, tcc_file_in: schemas.TCCFilePublic) -> models.TCCFile:
+    db_tcc_file = models.TCCFile(
+        tcc_id=tcc_file_in.tcc_id,
+        filename=tcc_file_in.filename,
+        filepath=tcc_file_in.filepath,
+        filetype=tcc_file_in.filetype,
+        upload_date=tcc_file_in.upload_date
+    )
+    db.add(db_tcc_file)
+    await db.commit()
+    await db.refresh(db_tcc_file)
+    return db_tcc_file
+
+async def get_tcc_files_by_tcc_id(db: AsyncSession, tcc_id: int) -> List[models.TCCFile]:
+    result = await db.execute(select(models.TCCFile).filter(models.TCCFile.tcc_id == tcc_id))
+    return result.scalars().all()
+
+async def get_tcc_file_by_id(db: AsyncSession, file_id: int) -> Optional[models.TCCFile]:
+    result = await db.execute(select(models.TCCFile).filter(models.TCCFile.id == file_id))
+    return result.scalars().first()
