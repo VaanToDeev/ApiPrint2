@@ -2,6 +2,7 @@ from sqlalchemy import Column, Integer, String, Enum as SAEnum, ForeignKey
 from sqlalchemy.orm import relationship
 from app.database import Base
 import enum
+from datetime import datetime # Import datetime
 
 class UserRole(str, enum.Enum):
     PROFESSOR = "professor"
@@ -67,3 +68,40 @@ class Curso(Base):
         return f"<Curso(id_curso={self.id_curso}, nome_curso='{self.nome_curso}')>"
 
 # TODO: Add TCC, DocumentoApoio, ChecklistTCC models later
+
+
+# Novo modelo TCC adicionado
+class TCC(Base):
+    __tablename__ = "tccs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    titulo = Column(String(255), nullable=False)
+    descricao = Column(String(1000), nullable=True)
+    ano = Column(Integer, nullable=False)
+
+    estudante_id = Column(Integer, ForeignKey("estudantes.id"), nullable=False)
+    estudante = relationship("Estudante", back_populates="tccs")
+
+    orientador_id = Column(Integer, ForeignKey("professores.id"), nullable=False)
+    orientador = relationship("Professor", back_populates="orientacoes_tcc")
+
+    files = relationship("TCCFile", back_populates="tcc", cascade="all, delete-orphan") # Relationship to TCC files
+
+    def __repr__(self):
+        return f"<TCC(id={self.id}, titulo='{self.titulo}')>"
+
+# Novo modelo TCCFile
+class TCCFile(Base):
+    __tablename__ = "tcc_files"
+
+    id = Column(Integer, primary_key=True, index=True)
+    tcc_id = Column(Integer, ForeignKey("tccs.id"), nullable=False)
+    filename = Column(String(255), nullable=False)
+    filepath = Column(String(255), nullable=False) # Path where the file is stored
+    filetype = Column(String(50), nullable=False) # e.g., 'application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    upload_date = Column(DateTime, default=datetime.now, nullable=False)
+    
+    tcc = relationship("TCC", back_populates="files")
+
+    def __repr__(self):
+        return f"<TCCFile(id={self.id}, filename='{self.filename}', tcc_id={self.tcc_id})>"
