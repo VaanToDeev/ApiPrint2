@@ -9,18 +9,36 @@ from datetime import timedelta
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
-@router.get("/me", response_model=schemas.UserPublic)
+@router.get("/me")
 async def get_current_user(
     current_user: models.Professor | models.Estudante = Depends(auth.get_current_active_user)
 ):
-    user_type = "professor" if getattr(current_user, "role", None) else "estudante"
-    return {
-        "id": current_user.id,
-        "nome": current_user.nome,
-        "email": current_user.email,
-        "role": getattr(current_user, "role", None),
-        "user_type": user_type
-    }
+    if isinstance(current_user, models.Professor):
+        user_type = "professor"
+        return {
+            "id": current_user.id,
+            "nome": current_user.nome,
+            "email": current_user.email,
+            "role": getattr(current_user, "role", None),
+            "user_type": user_type,
+            "siape": current_user.siape,
+            "departamento": current_user.departamento,
+            "titulacao": current_user.titulacao,
+            "telefone": current_user.telefone
+        }
+    else:  # Estudante
+        user_type = "estudante"
+        return {
+            "id": current_user.id,
+            "nome": current_user.nome,
+            "email": current_user.email,
+            "matricula": current_user.matricula,
+            "status": current_user.status.value if current_user.status else None,
+            "turma": current_user.turma,
+            "telefone": current_user.telefone,
+            "curso_id": current_user.curso_id,
+            "user_type": user_type
+}
 
 @router.post("/register/student", response_model=schemas.EstudantePublic, status_code=status.HTTP_201_CREATED)
 async def register_student(

@@ -175,3 +175,10 @@ async def get_tcc_files_by_tcc_id(db: AsyncSession, tcc_id: int) -> List[models.
 async def get_tcc_file_by_id(db: AsyncSession, file_id: int) -> Optional[models.TCCFile]:
     result = await db.execute(select(models.TCCFile).filter(models.TCCFile.id == file_id))
     return result.scalars().first()
+
+
+async def get_orientandos_by_professor_id(db: AsyncSession, professor_id: int):
+    result = await db.execute(
+        select(models.Estudante).where(models.Estudante.orientador_id == professor_id)
+    )
+    return result.scalars().all()

@@ -1,6 +1,8 @@
+from datetime import datetime
 from pydantic import BaseModel, EmailStr, Field
 from typing import Optional, List
 from app.models import UserRole, StatusEstudante # Import enums from models
+import enum
 
 # Token Schemas
 class Token(BaseModel):
@@ -50,14 +52,25 @@ class EstudanteUpdate(BaseModel):
 
 class EstudantePublic(UserBase):
     id: int
+    nome: str
+    email: str
     matricula: str
-    status: StatusEstudante
-    turma: Optional[str] = None
-    curso_id: Optional[int] = None
-    # telefone já está em UserBase
+    status: str  # Mantém como string, mas garanta que no endpoint converte para string
+    turma: Optional[str]
+    telefone: Optional[str]
+    curso_id: int
+    orientador_id: Optional[int]
 
     class Config:
-        from_attributes = True # For SQLAlchemy model conversion (formerly orm_mode)
+        from_attributes = True
+
+    @classmethod
+    def from_orm(cls, obj):
+        # Garante que status Enum vira string
+        data = super().from_orm(obj)
+        if hasattr(data, "status") and isinstance(data.status, enum.Enum):
+            data.status = data.status.value
+        return data # For SQLAlchemy model conversion (formerly orm_mode)
 
 # Professor Schemas
 class ProfessorCreate(UserCreateBase):
