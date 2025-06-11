@@ -1,14 +1,12 @@
 from fastapi import FastAPI, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
-
-from app.database import engine, Base, init_db, AsyncSessionLocal # Alterado get_db para AsyncSessionLocal
-from app.routers import auth_router, student_router, professor_router, admin_router
-from app.core.config import settings
-from app import crud, schemas, models # For initial admin creation
 from fastapi.middleware.cors import CORSMiddleware
 
-
-
+# Importações principais que não causam ciclos
+from app.database import init_db, AsyncSessionLocal
+from app.routers import auth_router, student_router, professor_router, admin_router
+from app.core.config import settings
+from app import models, schemas # crud foi removido daqui
 
 app = FastAPI(title="Sistema de Gestão Acadêmica API", version="0.1.0")
 
@@ -27,14 +25,14 @@ app.include_router(student_router.router)
 app.include_router(professor_router.router)
 app.include_router(admin_router.router)
 
-
-
 @app.on_event("startup")
 async def on_startup():
     await init_db() # Create tables
+
+    # Importação local de 'crud' para quebrar o ciclo de dependência
+    from app import crud
+    
     # Create initial Admin Professor if not exists
-    # Usar AsyncSessionLocal diretamente para tarefas de inicialização
-    # é mais idiomático do que depender do get_db() aqui.
     async with AsyncSessionLocal() as db:
         try:
             admin_user = await crud.get_professor_by_email(db, email=settings.INITIAL_ADMIN_EMAIL)
@@ -53,6 +51,7 @@ async def on_startup():
             else:
                 print(f"INFO:     Usuário administrador '{settings.INITIAL_ADMIN_EMAIL}' já existe.")
         except Exception as e:
+            # Imprime o erro específico que ocorre na criação do admin
             print(f"ERRO:     Ocorreu um erro durante a criação do usuário administrador inicial: {e}")
 
 

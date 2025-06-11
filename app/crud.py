@@ -1,10 +1,9 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from sqlalchemy.orm import selectinload # For eager loading if needed
+from sqlalchemy.orm import selectinload, joinedload
 from app import models, schemas
 from app.core.security import get_password_hash
 from typing import Optional, List
-from sqlalchemy.orm import selectinload, joinedload
 
 # --- Estudante CRUD ---
 async def get_estudante_by_email(db: AsyncSession, email: str) -> Optional[models.Estudante]:
@@ -27,7 +26,7 @@ async def create_estudante(db: AsyncSession, estudante: schemas.EstudanteCreate)
         hashed_password=hashed_password,
         matricula=estudante.matricula,
         turma=estudante.turma,
-        telefone=estudante.telefone, # ADICIONADO
+        telefone=estudante.telefone,
         curso_id=estudante.curso_id 
     )
     db.add(db_estudante)
@@ -61,7 +60,7 @@ async def create_professor(db: AsyncSession, professor: schemas.ProfessorCreate,
         siape=professor.siape,
         departamento=professor.departamento,
         titulacao=professor.titulacao,
-        telefone=professor.telefone, # ADICIONADO
+        telefone=professor.telefone,
         role=role 
     )
     db.add(db_professor)
@@ -81,6 +80,12 @@ async def update_professor_role(db: AsyncSession, professor_id: int, new_role: m
         await db.refresh(db_professor)
     return db_professor
 
+async def get_professores_by_departamento(db: AsyncSession, departamento: str):
+    result = await db.execute(
+        select(models.Professor).where(models.Professor.departamento == departamento)
+    )
+    return result.scalars().all()
+
 # --- Curso CRUD ---
 async def get_curso_by_id(db: AsyncSession, curso_id: int) -> Optional[models.Curso]:
     result = await db.execute(select(models.Curso).filter(models.Curso.id_curso == curso_id))
@@ -97,23 +102,14 @@ async def create_curso(db: AsyncSession, curso: schemas.CursoCreate) -> models.C
     await db.refresh(db_curso)
     return db_curso
 
-async def get_cursos(db: AsyncSession, skip: int = 0, limit: int = 100) -> List[models.Curso]:
-    result = await db.execute(select(models.Curso).offset(skip).limit(limit))
-    return result.scalars().all()
-
-async def assign_coordenador_to_curso(db: AsyncSession, curso_id: int, professor_id: int) -> Optional[models.Curso]:
+async def update_curso(db: AsyncSession, curso_id: int, curso_in: schemas.CursoUpdate) -> Optional[models.Curso]:
     db_curso = await get_curso_by_id(db, curso_id)
-    db_professor = await get_professor_by_id(db, professor_id)
-
-    if not db_curso:
-        return None # Curso not found
-    if not db_professor:
-        return None # Professor not found
-    
-    db_curso.coordenador_id = professor_id
-    
-    await db.commit()
-    await db.refresh(db_curso)
+    if db_curso:
+        update_data = curso_in.model_dump(exclude_unset=True) # Usar model_dump para Pydantic v2
+        for key, value in update_data.items():
+            setattr(db_curso, key, value)
+        await db.commit()
+        await db.refresh(db_curso)
     return db_curso
 
 async def get_cursos(db: AsyncSession, skip: int = 0, limit: int = 100):
@@ -122,28 +118,26 @@ async def get_cursos(db: AsyncSession, skip: int = 0, limit: int = 100):
     )
     return result.scalars().all()
 
-async def get_professores_by_departamento(db: AsyncSession, departamento: str):
-    result = await db.execute(
-        select(models.Professor).where(models.Professor.departamento == departamento)
-    )
-    return result.scalars().all()
+async def assign_coordenador_to_curso(db: AsyncSession, curso_id: int, professor_id: int) -> Optional[models.Curso]:
+    db_curso = await get_curso_by_id(db, curso_id)
+    db_professor = await get_professor_by_id(db, professor_id)
+    if not db_curso or not db_professor:
+        return None
+    db_curso.coordenador_id = professor_id
+    await db.commit()
+    await db.refresh(db_curso)
+    return db_curso
 
-async def get_professores_by_departamento(db: AsyncSession, departamento: str):
-    result = await db.execute(
-        select(models.Professor).where(models.Professor.departamento == departamento)
-    )
-    return result.scalars().all()
-
-# --- TCC CRUD  adicionado ---
+# --- TCC CRUD ---
 async def create_tcc(db: AsyncSession, tcc_in: schemas.TCCCreate) -> models.TCC:
-    db_tcc = models.TCC(**tcc_in.dict())
+    db_tcc = models.TCC(**tcc_in.model_dump()) # Usar model_dump para Pydantic v2
     db.add(db_tcc)
     await db.commit()
     await db.refresh(db_tcc)
     return db_tcc
 
 async def get_tcc_by_id(db: AsyncSession, tcc_id: int) -> Optional[models.TCC]:
-    result = await db.execute(select(models.TCC).filter(models.TCC.id == tcc_id))
+    result = await db.execute(select(models.TCC).options(selectinload(models.TCC.files)).filter(models.TCC.id == tcc_id))
     return result.scalars().first()
 
 async def get_tccs_by_estudante_id(db: AsyncSession, estudante_id: int) -> List[models.TCC]:
@@ -155,14 +149,8 @@ async def get_tccs_by_orientador_id(db: AsyncSession, orientador_id: int) -> Lis
     return result.scalars().all()
 
 # --- TCCFile CRUD ---
-async def create_tcc_file(db: AsyncSession, tcc_file_in: schemas.TCCFilePublic) -> models.TCCFile:
-    db_tcc_file = models.TCCFile(
-        tcc_id=tcc_file_in.tcc_id,
-        filename=tcc_file_in.filename,
-        filepath=tcc_file_in.filepath,
-        filetype=tcc_file_in.filetype,
-        upload_date=tcc_file_in.upload_date
-    )
+async def create_tcc_file(db: AsyncSession, tcc_file_in: schemas.TCCFileCreate) -> models.TCCFile:
+    db_tcc_file = models.TCCFile(**tcc_file_in.model_dump()) # Usar model_dump para Pydantic v2
     db.add(db_tcc_file)
     await db.commit()
     await db.refresh(db_tcc_file)
@@ -172,13 +160,9 @@ async def get_tcc_files_by_tcc_id(db: AsyncSession, tcc_id: int) -> List[models.
     result = await db.execute(select(models.TCCFile).filter(models.TCCFile.tcc_id == tcc_id))
     return result.scalars().all()
 
-async def get_tcc_file_by_id(db: AsyncSession, file_id: int) -> Optional[models.TCCFile]:
-    result = await db.execute(select(models.TCCFile).filter(models.TCCFile.id == file_id))
-    return result.scalars().first()
-
-
 async def get_orientandos_by_professor_id(db: AsyncSession, professor_id: int):
+    subquery = select(models.TCC.estudante_id).where(models.TCC.orientador_id == professor_id).scalar_subquery()
     result = await db.execute(
-        select(models.Estudante).where(models.Estudante.orientador_id == professor_id)
+        select(models.Estudante).where(models.Estudante.id.in_(subquery))
     )
     return result.scalars().all()
