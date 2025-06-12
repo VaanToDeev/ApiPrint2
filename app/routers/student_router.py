@@ -112,27 +112,16 @@ async def get_tcc_files(
     files = await crud.get_tcc_files_by_tcc_id(db, tcc_id)
     return files
 
-# Opcional: Adicionar endpoint para estudantes criarem seus próprios TCCs (se aplicável)
-@router.post("/tccs/", response_model=schemas.TCCPublic, status_code=status.HTTP_201_CREATED)
-async def create_new_tcc(
-    tcc_in: schemas.TCCCreate,
-    current_user: models.Estudante = Depends(auth.get_current_active_user),
-    db: AsyncSession = Depends(get_db)
+@router.get("/me/tccs", response_model=List[schemas.TCCPublic])
+async def get_my_tccs(
+    db: AsyncSession = Depends(get_db),
+    current_student: models.Estudante = Depends(auth.get_current_active_user)
 ):
-    if not isinstance(current_user, models.Estudante):
-        raise HTTPException(status_code=403, detail="Apenas estudantes podem criar TCCs diretamente através deste endpoint.")
+    """
+    Lista todos os TCCs que foram atribuídos ao estudante atualmente logado.
+    """
+    if not isinstance(current_student, models.Estudante):
+        raise HTTPException(status_code=403, detail="Acesso permitido apenas para contas de estudante.")
     
-    if tcc_in.estudante_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Você só pode criar TCCs para o seu próprio ID de estudante.")
-    
-    # Validar se o orientador existe
-    orientador = await crud.get_professor_by_id(db, tcc_in.orientador_id)
-    if not orientador:
-        raise HTTPException(status_code=404, detail="Orientador (Professor) não encontrado.")
-    
-    # Verificar se o estudante já possui um TCC (opcional, depende das regras de negócio)
-    existing_tccs = await crud.get_tccs_by_estudante_id(db, current_user.id)
-    if existing_tccs: # Exemplo: apenas um TCC por estudante
-        raise HTTPException(status_code=400, detail="O estudante já possui um TCC registrado.")
-
-    return await crud.create_tcc(db=db, tcc_in=tcc_in)
+    tccs = await crud.get_tccs_by_estudante_id(db, estudante_id=current_student.id)
+    return tccs

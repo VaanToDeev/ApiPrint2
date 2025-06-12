@@ -73,7 +73,7 @@ class ProfessorPublic(UserBase):
 class CursoBase(BaseModel):
     nome_curso: str = Field(..., min_length=3, max_length=100)
 
-class CursoCreate(CursoBase): # Garantindo que este schema existe
+class CursoCreate(CursoBase):
     pass
 
 class CursoUpdate(CursoBase):
@@ -89,15 +89,23 @@ class CursoPublic(CursoBase):
 class TCCBase(BaseModel):
     titulo: str
     descricao: Optional[str] = None
-    estudante_id: int
-    orientador_id: int
 
 class TCCCreate(TCCBase):
-    pass
+    estudante_id: int
+    # O orientador_id será pego do professor logado
 
 class TCCPublic(TCCBase):
     id: int
     status: StatusTCC
+    estudante_id: int
+    orientador_id: int
+    class Config:
+        from_attributes = True
+
+# NOVO: Schema para exibir TCC com detalhes de estudante e orientador
+class TCCDetailsPublic(TCCPublic):
+    estudante: EstudantePublic
+    orientador: ProfessorPublic
     class Config:
         from_attributes = True
 

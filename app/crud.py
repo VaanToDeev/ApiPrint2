@@ -129,8 +129,12 @@ async def assign_coordenador_to_curso(db: AsyncSession, curso_id: int, professor
     return db_curso
 
 # --- TCC CRUD ---
-async def create_tcc(db: AsyncSession, tcc_in: schemas.TCCCreate) -> models.TCC:
-    db_tcc = models.TCC(**tcc_in.model_dump()) # Usar model_dump para Pydantic v2
+async def create_tcc(db: AsyncSession, tcc_in: schemas.TCCCreate, orientador_id: int) -> models.TCC:
+    # Usar model_dump() para Pydantic v2
+    db_tcc = models.TCC(
+        **tcc_in.model_dump(),
+        orientador_id=orientador_id
+    )
     db.add(db_tcc)
     await db.commit()
     await db.refresh(db_tcc)
