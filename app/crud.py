@@ -170,3 +170,62 @@ async def get_orientandos_by_professor_id(db: AsyncSession, professor_id: int):
         select(models.Estudante).where(models.Estudante.id.in_(subquery))
     )
     return result.scalars().all()
+
+async def create_arquivo(db: AsyncSession, arquivo: schemas.ArquivoCreate, tarefa_id: int) -> models.Arquivo:
+    db_arquivo = models.Arquivo(
+        **arquivo.model_dump(),
+        tarefa_id=tarefa_id
+    )
+    db.add(db_arquivo)
+    await db.commit()
+    await db.refresh(db_arquivo)
+    return db_arquivo
+
+# --- Tarefa CRUD ---
+
+async def create_tarefa(db: AsyncSession, tarefa: schemas.TarefaCreate, tcc_id: int) -> models.Tarefa:
+    db_tarefa = models.Tarefa(
+        **tarefa.model_dump(),
+        tcc_id=tcc_id,
+        status=models.StatusTarefa.A_FAZER # Status inicial
+    )
+    db.add(db_tarefa)
+    await db.commit()
+    await db.refresh(db_tarefa)
+    return db_tarefa
+
+async def get_tarefa_by_id(db: AsyncSession, tarefa_id: int) -> Optional[models.Tarefa]:
+    result = await db.execute(
+        select(models.Tarefa).options(selectinload(models.Tarefa.arquivos)).where(models.Tarefa.id == tarefa_id)
+    )
+    return result.scalars().first()
+
+async def get_tarefas_by_tcc_id(db: AsyncSession, tcc_id: int) -> List[models.Tarefa]:
+    result = await db.execute(
+        select(models.Tarefa).options(selectinload(models.Tarefa.arquivos)).where(models.Tarefa.tcc_id == tcc_id)
+    )
+    return result.scalars().all()
+
+async def update_tarefa(db: AsyncSession, tarefa: models.Tarefa, tarefa_update: schemas.TarefaUpdate) -> models.Tarefa:
+    update_data = tarefa_update.model_dump(exclude_unset=True)
+    for key, value in update_data.items():
+        setattr(tarefa, key, value)
+    
+    db.add(tarefa) # Adiciona o objeto à sessão para rastrear as mudanças
+    await db.commit()
+    
+    # Após o commit, a relação 'arquivos' ainda está carregada da busca inicial.
+    # Evitamos o db.refresh(tarefa) que expiraria essa relação.
+    # Para garantir consistência total, recarregamos o objeto com suas relações.
+    await db.refresh(tarefa, attribute_names=['titulo', 'descricao', 'data_entrega', 'status'])
+    # Se a relação 'arquivos' fosse modificada, precisaríamos de: await db.refresh(tarefa, relationship_loaders={'arquivos': selectinload})
+
+    return tarefa
+
+async def delete_tarefa(db: AsyncSession, tarefa_id: int) -> bool:
+    db_tarefa = await get_tarefa_by_id(db, tarefa_id)
+    if db_tarefa:
+        await db.delete(db_tarefa)
+        await db.commit()
+        return True
+    return False

@@ -1,7 +1,7 @@
 from pydantic import BaseModel, EmailStr, Field
 from typing import Optional, List
-from datetime import datetime
-from app.models import UserRole, StatusEstudante, StatusTCC
+from datetime import datetime, date
+from app.models import UserRole, StatusEstudante, StatusTCC, StatusTarefa
 
 # --- Schemas de Autenticação e Token ---
 class Token(BaseModel):
@@ -125,7 +125,45 @@ class TCCFilePublic(TCCFileBase):
     class Config:
         from_attributes = True
 
+class ArquivoBase(BaseModel):
+    nome_arquivo: str
+    caminho_arquivo: str
+
+class ArquivoCreate(ArquivoBase):
+    pass
+
+class ArquivoPublic(ArquivoBase):
+    id: int
+    data_upload: datetime
+    tarefa_id: int
+    class Config:
+        from_attributes = True
+
 # --- Schema de Login ---
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str
+
+# --- NOVO: Schemas de Tarefa ---
+class TarefaBase(BaseModel):
+    titulo: str = Field(..., min_length=3, max_length=255)
+    descricao: Optional[str] = None
+    data_entrega: Optional[date] = None
+
+class TarefaCreate(TarefaBase):
+    pass
+
+class TarefaUpdate(BaseModel):
+    titulo: Optional[str] = Field(None, min_length=3, max_length=255)
+    descricao: Optional[str] = None
+    data_entrega: Optional[date] = None
+    status: Optional[StatusTarefa] = None
+
+class TarefaPublic(TarefaBase):
+    id: int
+    tcc_id: int
+    status: StatusTarefa
+    # NOVO: Inclui a lista de arquivos submetidos
+    arquivos: List[ArquivoPublic] = []
+    class Config:
+        from_attributes = True

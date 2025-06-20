@@ -125,3 +125,48 @@ async def get_my_tccs(
     
     tccs = await crud.get_tccs_by_estudante_id(db, estudante_id=current_student.id)
     return tccs
+
+@router.post("/tarefas/{tarefa_id}/arquivos", response_model=schemas.ArquivoPublic, status_code=status.HTTP_201_CREATED)
+async def upload_file_for_task(
+    tarefa_id: int,
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+    current_student: models.Estudante = Depends(auth.get_current_active_user)
+):
+    """
+    Permite que um estudante faça o upload de um arquivo para uma tarefa específica de seu TCC.
+    """
+    if not isinstance(current_student, models.Estudante):
+        raise HTTPException(status_code=403, detail="Acesso permitido apenas para estudantes.")
+
+    # Verifica se a tarefa existe e se pertence ao estudante logado
+    tarefa = await crud.get_tarefa_by_id(db, tarefa_id)
+    if not tarefa:
+        raise HTTPException(status_code=404, detail="Tarefa não encontrada.")
+    if tarefa.tcc.estudante_id != current_student.id:
+        raise HTTPException(status_code=403, detail="Você só pode enviar arquivos para suas próprias tarefas.")
+        
+    # Salva o arquivo em disco
+    unique_id = uuid.uuid4()
+    file_extension = Path(file.filename).suffix
+    unique_filename = f"{unique_id}{file_extension}"
+    file_path = UPLOAD_DIR / unique_filename
+    
+    try:
+        with open(file_path, "wb") as buffer:
+            buffer.write(await file.read())
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Não foi possível salvar o arquivo: {e}")
+
+    # Cria o registro no banco de dados
+    arquivo_in = schemas.ArquivoCreate(
+        nome_arquivo=file.filename,
+        caminho_arquivo=str(file_path)
+    )
+    
+    # Atualiza o status da tarefa para "feita" ou "revisar" (depende da sua regra)
+    await crud.update_tarefa(db, tarefa_id, schemas.TarefaUpdate(status=models.StatusTarefa.FEITA))
+    
+    return await crud.create_arquivo(db, arquivo=arquivo_in, tarefa_id=tarefa_id)
+
+

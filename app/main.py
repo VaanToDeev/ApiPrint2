@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 # Importações principais que não causam ciclos
 from app.database import init_db, AsyncSessionLocal
-from app.routers import auth_router, student_router, professor_router, admin_router
+from app.routers import auth_router, student_router, professor_router, admin_router, tarefa_router
 from app.core.config import settings
 from app import models, schemas # crud foi removido daqui
 
@@ -24,6 +24,7 @@ app.include_router(auth_router.router)
 app.include_router(student_router.router)
 app.include_router(professor_router.router)
 app.include_router(admin_router.router)
+app.include_router(tarefa_router.router)
 
 @app.on_event("startup")
 async def on_startup():
