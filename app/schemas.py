@@ -1,7 +1,7 @@
 from pydantic import BaseModel, EmailStr, Field
 from typing import Optional, List
 from datetime import datetime, date
-from app.models import UserRole, StatusEstudante, StatusTCC, StatusTarefa
+from app.models import UserRole, StatusEstudante, StatusTCC, StatusTarefa, StatusConvite
 
 # --- Schemas de Autenticação e Token ---
 class Token(BaseModel):
@@ -92,7 +92,6 @@ class TCCBase(BaseModel):
 
 class TCCCreate(TCCBase):
     estudante_id: int
-    # O orientador_id será pego do professor logado
 
 class TCCPublic(TCCBase):
     id: int
@@ -102,7 +101,6 @@ class TCCPublic(TCCBase):
     class Config:
         from_attributes = True
 
-# NOVO: Schema para exibir TCC com detalhes de estudante e orientador
 class TCCDetailsPublic(TCCPublic):
     estudante: EstudantePublic
     orientador: ProfessorPublic
@@ -144,7 +142,7 @@ class LoginRequest(BaseModel):
     email: EmailStr
     password: str
 
-# --- NOVO: Schemas de Tarefa ---
+# --- Schemas de Tarefa ---
 class TarefaBase(BaseModel):
     titulo: str = Field(..., min_length=3, max_length=255)
     descricao: Optional[str] = None
@@ -163,7 +161,28 @@ class TarefaPublic(TarefaBase):
     id: int
     tcc_id: int
     status: StatusTarefa
-    # NOVO: Inclui a lista de arquivos submetidos
     arquivos: List[ArquivoPublic] = []
+    class Config:
+        from_attributes = True
+
+# --- NOVO: Schemas de Convite de Orientação ---
+class ConviteOrientacaoBase(BaseModel):
+    titulo_proposto: str = Field(..., min_length=10, max_length=255)
+    descricao_proposta: Optional[str] = None
+
+class ConviteOrientacaoCreate(ConviteOrientacaoBase):
+    estudante_id: int
+
+class ConviteOrientacaoUpdate(BaseModel):
+    status: StatusConvite # O aluno só poderá mudar para ACEITO ou RECUSADO
+
+class ConviteOrientacaoPublic(ConviteOrientacaoBase):
+    id: int
+    status: StatusConvite
+    data_convite: datetime
+    data_resposta: Optional[datetime] = None
+    professor: ProfessorPublic
+    estudante: EstudantePublic
+
     class Config:
         from_attributes = True

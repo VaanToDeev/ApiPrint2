@@ -4,6 +4,7 @@ from sqlalchemy.orm import selectinload, joinedload
 from app import models, schemas
 from app.core.security import get_password_hash
 from typing import Optional, List
+from datetime import datetime
 
 # --- Estudante CRUD ---
 async def get_estudante_by_email(db: AsyncSession, email: str) -> Optional[models.Estudante]:
@@ -105,7 +106,7 @@ async def create_curso(db: AsyncSession, curso: schemas.CursoCreate) -> models.C
 async def update_curso(db: AsyncSession, curso_id: int, curso_in: schemas.CursoUpdate) -> Optional[models.Curso]:
     db_curso = await get_curso_by_id(db, curso_id)
     if db_curso:
-        update_data = curso_in.model_dump(exclude_unset=True) # Usar model_dump para Pydantic v2
+        update_data = curso_in.model_dump(exclude_unset=True)
         for key, value in update_data.items():
             setattr(db_curso, key, value)
         await db.commit()
@@ -130,7 +131,6 @@ async def assign_coordenador_to_curso(db: AsyncSession, curso_id: int, professor
 
 # --- TCC CRUD ---
 async def create_tcc(db: AsyncSession, tcc_in: schemas.TCCCreate, orientador_id: int) -> models.TCC:
-    # Usar model_dump() para Pydantic v2
     db_tcc = models.TCC(
         **tcc_in.model_dump(),
         orientador_id=orientador_id
@@ -152,9 +152,74 @@ async def get_tccs_by_orientador_id(db: AsyncSession, orientador_id: int) -> Lis
     result = await db.execute(select(models.TCC).filter(models.TCC.orientador_id == orientador_id))
     return result.scalars().all()
 
+# --- Convite de Orientação CRUD ---
+async def create_convite_orientacao(db: AsyncSession, convite: schemas.ConviteOrientacaoCreate, professor_id: int) -> models.OrientacaoConvite:
+    db_convite = models.OrientacaoConvite(
+        titulo_proposto=convite.titulo_proposto,
+        descricao_proposta=convite.descricao_proposta,
+        estudante_id=convite.estudante_id,
+        professor_id=professor_id
+    )
+    db.add(db_convite)
+    await db.commit()
+    await db.refresh(db_convite)
+    return db_convite
+
+async def get_convite_by_id(db: AsyncSession, convite_id: int) -> Optional[models.OrientacaoConvite]:
+    result = await db.execute(
+        select(models.OrientacaoConvite)
+        .options(
+            selectinload(models.OrientacaoConvite.professor),
+            selectinload(models.OrientacaoConvite.estudante)
+        )
+        .filter(models.OrientacaoConvite.id == convite_id)
+    )
+    return result.scalars().first()
+
+async def get_convites_by_estudante_id(db: AsyncSession, estudante_id: int) -> List[models.OrientacaoConvite]:
+    result = await db.execute(
+        select(models.OrientacaoConvite)
+        .options(
+            selectinload(models.OrientacaoConvite.professor),
+            selectinload(models.OrientacaoConvite.estudante)
+        )
+        .where(models.OrientacaoConvite.estudante_id == estudante_id)
+        .order_by(models.OrientacaoConvite.data_convite.desc())
+    )
+    return result.scalars().all()
+
+async def get_convites_by_professor_id(db: AsyncSession, professor_id: int) -> List[models.OrientacaoConvite]:
+    result = await db.execute(
+        select(models.OrientacaoConvite)
+        .options(
+            selectinload(models.OrientacaoConvite.professor),
+            selectinload(models.OrientacaoConvite.estudante)
+        )
+        .where(models.OrientacaoConvite.professor_id == professor_id)
+        .order_by(models.OrientacaoConvite.data_convite.desc())
+    )
+    return result.scalars().all()
+
+async def update_convite_orientacao(db: AsyncSession, convite: models.OrientacaoConvite, update_data: schemas.ConviteOrientacaoUpdate) -> models.OrientacaoConvite:
+    convite.status = update_data.status
+    convite.data_resposta = datetime.utcnow()
+    db.add(convite)
+    await db.commit()
+    await db.refresh(convite)
+    return convite
+
+async def get_pending_convite_for_estudante(db: AsyncSession, estudante_id: int) -> Optional[models.OrientacaoConvite]:
+    result = await db.execute(
+        select(models.OrientacaoConvite).filter(
+            models.OrientacaoConvite.estudante_id == estudante_id,
+            models.OrientacaoConvite.status == models.StatusConvite.PENDENTE
+        )
+    )
+    return result.scalars().first()
+
 # --- TCCFile CRUD ---
 async def create_tcc_file(db: AsyncSession, tcc_file_in: schemas.TCCFileCreate) -> models.TCCFile:
-    db_tcc_file = models.TCCFile(**tcc_file_in.model_dump()) # Usar model_dump para Pydantic v2
+    db_tcc_file = models.TCCFile(**tcc_file_in.model_dump())
     db.add(db_tcc_file)
     await db.commit()
     await db.refresh(db_tcc_file)
@@ -182,12 +247,11 @@ async def create_arquivo(db: AsyncSession, arquivo: schemas.ArquivoCreate, taref
     return db_arquivo
 
 # --- Tarefa CRUD ---
-
 async def create_tarefa(db: AsyncSession, tarefa: schemas.TarefaCreate, tcc_id: int) -> models.Tarefa:
     db_tarefa = models.Tarefa(
         **tarefa.model_dump(),
         tcc_id=tcc_id,
-        status=models.StatusTarefa.A_FAZER # Status inicial
+        status=models.StatusTarefa.A_FAZER
     )
     db.add(db_tarefa)
     await db.commit()
@@ -210,16 +274,9 @@ async def update_tarefa(db: AsyncSession, tarefa: models.Tarefa, tarefa_update: 
     update_data = tarefa_update.model_dump(exclude_unset=True)
     for key, value in update_data.items():
         setattr(tarefa, key, value)
-    
-    db.add(tarefa) # Adiciona o objeto à sessão para rastrear as mudanças
+    db.add(tarefa)
     await db.commit()
-    
-    # Após o commit, a relação 'arquivos' ainda está carregada da busca inicial.
-    # Evitamos o db.refresh(tarefa) que expiraria essa relação.
-    # Para garantir consistência total, recarregamos o objeto com suas relações.
     await db.refresh(tarefa, attribute_names=['titulo', 'descricao', 'data_entrega', 'status'])
-    # Se a relação 'arquivos' fosse modificada, precisaríamos de: await db.refresh(tarefa, relationship_loaders={'arquivos': selectinload})
-
     return tarefa
 
 async def delete_tarefa(db: AsyncSession, tarefa_id: int) -> bool:

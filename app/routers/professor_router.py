@@ -14,8 +14,6 @@ async def read_professor_me(
         raise HTTPException(status_code=403, detail="Not a professor account")
     return current_user
 
-# Add more professor-specific endpoints (e.g., view TCCs they orient)
-
 @router.put("/me", response_model=schemas.ProfessorPublic)
 async def update_current_user(
     user_update: schemas.ProfessorUpdate,
@@ -33,42 +31,83 @@ async def list_all_students_for_professor(
     db: AsyncSession = Depends(get_db),
     current_professor: models.Professor = Depends(auth.get_current_active_user)
 ):
+    if not isinstance(current_professor, models.Professor):
+        raise HTTPException(status_code=403, detail="Acesso permitido apenas para professores.")
+    
+    students = await crud.get_estudantes(db, skip=0, limit=1000) 
+    return students
+
+# @router.post("/tccs/", response_model=schemas.TCCPublic, status_code=status.HTTP_201_CREATED)
+# async def create_tcc_for_student(
+#     tcc_in: schemas.TCCCreate,
+#     db: AsyncSession = Depends(get_db),
+#     current_professor: models.Professor = Depends(auth.get_current_active_user)
+# ):
+#     """
+#     DEPRECATED: This endpoint is replaced by the invitation flow.
+#     A TCC is now created only after a student accepts an invitation.
+#     """
+#     if not isinstance(current_professor, models.Professor):
+#         raise HTTPException(status_code=403, detail="Apenas professores podem criar TCCs.")
+
+#     student = await crud.get_estudante_by_id(db, tcc_in.estudante_id)
+#     if not student:
+#         raise HTTPException(status_code=404, detail=f"Estudante com ID {tcc_in.estudante_id} não encontrado.")
+
+#     orientador_id = current_professor.id
+    
+#     existing_tccs = await crud.get_tccs_by_estudante_id(db, tcc_in.estudante_id)
+#     if existing_tccs:
+#         raise HTTPException(status_code=400, detail="Este estudante já possui um TCC registrado.")
+
+#     return await crud.create_tcc(db=db, tcc_in=tcc_in, orientador_id=orientador_id)
+
+@router.post("/me/convites-orientacao", response_model=schemas.ConviteOrientacaoPublic, status_code=status.HTTP_201_CREATED)
+async def convidar_aluno_para_orientacao(
+    convite_in: schemas.ConviteOrientacaoCreate,
+    db: AsyncSession = Depends(get_db),
+    current_professor: models.Professor = Depends(auth.get_current_active_user)
+):
     """
-    Fornece uma lista de todos os estudantes.
-    Destinado para uso do professor no frontend para selecionar um aluno ao criar um TCC.
-    Acessível por qualquer professor logado.
+    1. Professor: Convidar aluno para orientação.
+
+    Envia um convite para um aluno para ser orientado em um TCC.
+    O professor deve estar logado.
+    """
+    if not isinstance(current_professor, models.Professor):
+        raise HTTPException(status_code=status.HTTP_403, detail="Apenas professores podem enviar convites.")
+
+    estudante = await crud.get_estudante_by_id(db, convite_in.estudante_id)
+    if not estudante:
+        raise HTTPException(status_code=404, detail=f"Estudante com ID {convite_in.estudante_id} não encontrado.")
+
+    existing_tcc = await crud.get_tccs_by_estudante_id(db, estudante.id)
+    if existing_tcc:
+        raise HTTPException(status_code=400, detail="Este estudante já possui um TCC registrado.")
+
+    existing_invite = await crud.get_pending_convite_for_estudante(db, estudante.id)
+    if existing_invite:
+        raise HTTPException(status_code=400, detail="Este estudante já possui um convite de orientação pendente.")
+    
+    novo_convite = await crud.create_convite_orientacao(db=db, convite=convite_in, professor_id=current_professor.id)
+    
+    convite_completo = await crud.get_convite_by_id(db, novo_convite.id)
+    return convite_completo
+
+@router.get("/me/convites-orientacao", response_model=List[schemas.ConviteOrientacaoPublic])
+async def get_meus_convites_enviados(
+    db: AsyncSession = Depends(get_db),
+    current_professor: models.Professor = Depends(auth.get_current_active_user)
+):
+    """
+    Lista todos os convites de orientação enviados pelo professor logado.
     """
     if not isinstance(current_professor, models.Professor):
         raise HTTPException(status_code=403, detail="Acesso permitido apenas para professores.")
     
-    # Busca todos os estudantes. Em uma aplicação real, considere paginação.
-    students = await crud.get_estudantes(db, skip=0, limit=1000) 
-    return students
+    convites = await crud.get_convites_by_professor_id(db, professor_id=current_professor.id)
+    return convites
 
-@router.post("/tccs/", response_model=schemas.TCCPublic, status_code=status.HTTP_201_CREATED)
-async def create_tcc_for_student(
-    tcc_in: schemas.TCCCreate,
-    db: AsyncSession = Depends(get_db),
-    current_professor: models.Professor = Depends(auth.get_current_active_user)
-):
-    if not isinstance(current_professor, models.Professor):
-        raise HTTPException(status_code=403, detail="Apenas professores podem criar TCCs.")
-
-    # Validar se o estudante existe
-    student = await crud.get_estudante_by_id(db, tcc_in.estudante_id)
-    if not student:
-        raise HTTPException(status_code=404, detail=f"Estudante com ID {tcc_in.estudante_id} não encontrado.")
-
-    # O orientador é sempre o professor que está logado
-    orientador_id = current_professor.id
-    
-    # Verificar se o estudante já possui um TCC (opcional, regra de negócio)
-    existing_tccs = await crud.get_tccs_by_estudante_id(db, tcc_in.estudante_id)
-    if existing_tccs:
-        raise HTTPException(status_code=400, detail="Este estudante já possui um TCC registrado.")
-
-    # Cria o TCC usando o ID do professor logado como orientador
-    return await crud.create_tcc(db=db, tcc_in=tcc_in, orientador_id=orientador_id)
 
 @router.get("/me/tccs", response_model=List[schemas.TCCPublic])
 async def get_my_oriented_tccs(
@@ -86,7 +125,6 @@ async def list_professores_mesmo_departamento(
     db: AsyncSession = Depends(get_db),
     current_user: models.Professor = Depends(auth.get_current_active_user)
 ):
-    # Permitir apenas coordenador ou admin
     if current_user.role not in [models.UserRole.COORDENADOR, models.UserRole.ADMIN]:
         raise HTTPException(status_code=403, detail="Acesso permitido apenas para coordenador ou admin.")
 
@@ -110,13 +148,9 @@ async def create_task_for_tcc(
     db: AsyncSession = Depends(get_db),
     current_professor: models.Professor = Depends(auth.get_current_active_user)
 ):
-    """
-    Cria uma nova tarefa para um TCC específico. Apenas o orientador do TCC pode criar tarefas.
-    """
     if not isinstance(current_professor, models.Professor):
         raise HTTPException(status_code=403, detail="Acesso permitido apenas para professores.")
 
-    # Verifica se o TCC existe e se o professor logado é o orientador
     tcc = await crud.get_tcc_by_id(db, tcc_id)
     if not tcc:
         raise HTTPException(status_code=404, detail="TCC não encontrado.")
@@ -132,9 +166,6 @@ async def update_task(
     db: AsyncSession = Depends(get_db),
     current_professor: models.Professor = Depends(auth.get_current_active_user)
 ):
-    """
-    Atualiza uma tarefa. Apenas o orientador do TCC pode atualizar a tarefa.
-    """
     if not isinstance(current_professor, models.Professor):
         raise HTTPException(status_code=403, detail="Acesso permitido apenas para professores.")
         
@@ -144,7 +175,7 @@ async def update_task(
     if tarefa.tcc.orientador_id != current_professor.id:
         raise HTTPException(status_code=403, detail="Você só pode editar tarefas dos TCCs que orienta.")
         
-    return await crud.update_tarefa(db=db, tarefa_id=tarefa_id, tarefa_update=tarefa_update)
+    return await crud.update_tarefa(db=db, tarefa=tarefa, tarefa_update=tarefa_update)
 
 @router.delete("/tarefas/{tarefa_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_task(
@@ -152,9 +183,6 @@ async def delete_task(
     db: AsyncSession = Depends(get_db),
     current_professor: models.Professor = Depends(auth.get_current_active_user)
 ):
-    """
-    Deleta uma tarefa. Apenas o orientador do TCC pode deletar a tarefa.
-    """
     if not isinstance(current_professor, models.Professor):
         raise HTTPException(status_code=403, detail="Acesso permitido apenas para professores.")
         
@@ -167,21 +195,16 @@ async def delete_task(
     await crud.delete_tarefa(db, tarefa_id=tarefa_id)
     return
 
-# Endpoint para o professor (e aluno) ver as tarefas de um TCC
 @router.get("/tccs/{tcc_id}/tarefas", response_model=List[schemas.TarefaPublic])
 async def get_tasks_for_tcc(
     tcc_id: int,
     db: AsyncSession = Depends(get_db),
     current_user: models.Professor | models.Estudante = Depends(auth.get_current_active_user)
 ):
-    """
-    Lista as tarefas de um TCC específico. Acessível pelo orientador ou pelo estudante do TCC.
-    """
     tcc = await crud.get_tcc_by_id(db, tcc_id)
     if not tcc:
         raise HTTPException(status_code=404, detail="TCC não encontrado.")
     
-    # Verifica se o usuário logado tem permissão
     is_orientador = isinstance(current_user, models.Professor) and tcc.orientador_id == current_user.id
     is_aluno = isinstance(current_user, models.Estudante) and tcc.estudante_id == current_user.id
     

@@ -1,3 +1,5 @@
+# models.py
+
 from sqlalchemy import Column, Integer, String, Enum as SAEnum, ForeignKey, DateTime, Text, Date
 from sqlalchemy.orm import relationship
 from app.database import Base
@@ -18,13 +20,18 @@ class StatusTCC(str, enum.Enum):
     CONCLUIDO = "concluido"
     CANCELADO = "cancelado"
 
-# NOVO: Enum para o status da Tarefa
 class StatusTarefa(str, enum.Enum):
     A_FAZER = "a_fazer"
     FAZENDO = "fazendo"
     REVISAR = "revisar"
     FEITA = "feita"
     CONCLUIDA = "concluida"
+
+# NOVO: Enum para o status do Convite de Orientação
+class StatusConvite(str, enum.Enum):
+    PENDENTE = "pendente"
+    ACEITO = "aceito"
+    RECUSADO = "recusado"
 
 class Professor(Base):
     __tablename__ = "professores"
@@ -39,6 +46,9 @@ class Professor(Base):
     role = Column(SAEnum(UserRole), default=UserRole.PROFESSOR, nullable=False)
     curso_coordenado = relationship("Curso", back_populates="coordenador", uselist=False)
     tccs_orientados = relationship("TCC", back_populates="orientador", foreign_keys="[TCC.orientador_id]")
+    # NOVO: Relacionamento com convites enviados
+    convites_enviados = relationship("OrientacaoConvite", back_populates="professor", foreign_keys="[OrientacaoConvite.professor_id]")
+
 
 class Estudante(Base):
     __tablename__ = "estudantes"
@@ -53,6 +63,30 @@ class Estudante(Base):
     curso_id = Column(Integer, ForeignKey("cursos.id_curso"))
     curso = relationship("Curso", back_populates="estudantes")
     tccs = relationship("TCC", back_populates="estudante", foreign_keys="[TCC.estudante_id]")
+    # NOVO: Relacionamento com convites recebidos
+    convites_recebidos = relationship("OrientacaoConvite", back_populates="estudante", foreign_keys="[OrientacaoConvite.estudante_id]")
+
+# NOVO: Modelo para armazenar convites de orientação
+class OrientacaoConvite(Base):
+    __tablename__ = "orientacao_convites"
+    id = Column(Integer, primary_key=True, index=True)
+    
+    # Proposta de TCC
+    titulo_proposto = Column(String(255), nullable=False)
+    descricao_proposta = Column(Text, nullable=True)
+
+    # Status e Timestamps
+    status = Column(SAEnum(StatusConvite), default=StatusConvite.PENDENTE, nullable=False)
+    data_convite = Column(DateTime, default=datetime.utcnow, nullable=False)
+    data_resposta = Column(DateTime, nullable=True)
+
+    # Foreign Keys e Relacionamentos
+    professor_id = Column(Integer, ForeignKey("professores.id"), nullable=False)
+    estudante_id = Column(Integer, ForeignKey("estudantes.id"), nullable=False)
+
+    professor = relationship("Professor", back_populates="convites_enviados")
+    estudante = relationship("Estudante", back_populates="convites_recebidos")
+
 
 class Curso(Base):
     __tablename__ = "cursos"
@@ -73,10 +107,8 @@ class TCC(Base):
     estudante = relationship("Estudante", back_populates="tccs", foreign_keys=[estudante_id])
     orientador = relationship("Professor", back_populates="tccs_orientados", foreign_keys=[orientador_id])
     files = relationship("TCCFile", back_populates="tcc", cascade="all, delete-orphan")
-    # NOVO: Relacionamento com Tarefas
     tarefas = relationship("Tarefa", back_populates="tcc", cascade="all, delete-orphan")
 
-# NOVO: Modelo Tarefa
 class Tarefa(Base):
     __tablename__ = "tarefas"
     id = Column(Integer, primary_key=True, index=True)
@@ -85,24 +117,18 @@ class Tarefa(Base):
     data_entrega = Column(Date, nullable=True)
     status = Column(SAEnum(StatusTarefa), default=StatusTarefa.A_FAZER, nullable=False)
     tcc_id = Column(Integer, ForeignKey("tccs.id"), nullable=False)
-    
     tcc = relationship("TCC", back_populates="tarefas")
-    # NOVO: Relacionamento com Arquivos
     arquivos = relationship("Arquivo", back_populates="tarefa", cascade="all, delete-orphan")
 
-# NOVO: Modelo Arquivo (anteriormente TCCFile, agora mais genérico)
 class Arquivo(Base):
     __tablename__ = "arquivos"
     id = Column(Integer, primary_key=True, index=True)
     nome_arquivo = Column(String(255), nullable=False)
-    caminho_arquivo = Column(String(512), nullable=False) # Caminho no servidor
+    caminho_arquivo = Column(String(512), nullable=False)
     data_upload = Column(DateTime, default=datetime.utcnow, nullable=False)
-    
-    # FK para a Tarefa a que este arquivo pertence
     tarefa_id = Column(Integer, ForeignKey("tarefas.id"), nullable=False)
     tarefa = relationship("Tarefa", back_populates="arquivos")
 
-# Renomeado TCCFile para um nome mais genérico e linkado à Tarefa
 class TCCFile(Base):
     __tablename__ = "tcc_files"
     id = Column(Integer, primary_key=True, index=True)
