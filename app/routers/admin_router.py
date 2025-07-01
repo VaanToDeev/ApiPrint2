@@ -101,3 +101,4 @@ async def delete_curso(
     await db.delete(curso)
     await db.commit()
     return
+
