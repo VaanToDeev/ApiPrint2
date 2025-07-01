@@ -83,6 +83,7 @@ class CursoPublic(CursoBase):
     id_curso: int
     coordenador_id: Optional[int] = None
     class Config:
+        orm_mode = True
         from_attributes = True
 
 # --- Schemas de TCC ---
@@ -165,7 +166,7 @@ class TarefaPublic(TarefaBase):
     class Config:
         from_attributes = True
 
-# --- NOVO: Schemas de Convite de Orientação ---
+# --- Schemas de Convite de Orientação ---
 class ConviteOrientacaoBase(BaseModel):
     titulo_proposto: str = Field(..., min_length=10, max_length=255)
     descricao_proposta: Optional[str] = None
@@ -186,3 +187,8 @@ class ConviteOrientacaoPublic(ConviteOrientacaoBase):
 
     class Config:
         from_attributes = True
+
+# --- NOVO: Schema de Resposta ao Convite ---
+class ConviteRespostaPublic(BaseModel):
+    convite: ConviteOrientacaoPublic
+    tcc: Optional[TCCPublic] = None

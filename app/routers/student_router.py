@@ -37,7 +37,7 @@ async def get_meus_convites_recebidos(
     convites = await crud.get_convites_by_estudante_id(db, estudante_id=current_student.id)
     return convites
 
-@router.post("/me/convites-orientacao/{convite_id}/responder", response_model=schemas.ConviteOrientacaoPublic)
+@router.post("/me/convites-orientacao/{convite_id}/responder", response_model=schemas.ConviteRespostaPublic)
 async def responder_convite_orientacao(
     convite_id: int,
     resposta: schemas.ConviteOrientacaoUpdate,
@@ -48,11 +48,12 @@ async def responder_convite_orientacao(
     2. Aluno: Aceitar/Recusar convite de orientação.
 
     Permite que o estudante logado aceite ou recuse um convite pendente.
-    Se o convite for aceito, um novo TCC é criado automaticamente.
+    Se o convite for aceito, um novo TCC é criado automaticamente e retornado na resposta.
     """
     if not isinstance(current_student, models.Estudante):
         raise HTTPException(status_code=403, detail="Acesso permitido apenas para contas de estudante.")
 
+    # Busca o convite original
     convite = await crud.get_convite_by_id(db, convite_id)
     if not convite:
         raise HTTPException(status_code=404, detail="Convite não encontrado.")
@@ -63,21 +64,33 @@ async def responder_convite_orientacao(
     if resposta.status not in [models.StatusConvite.ACEITO, models.StatusConvite.RECUSADO]:
         raise HTTPException(status_code=400, detail="A resposta deve ser 'aceito' ou 'recusado'.")
 
-    convite_atualizado = await crud.update_convite_orientacao(db, convite=convite, update_data=resposta)
+    novo_tcc = None
+    convite_atualizado = None
 
-    if convite_atualizado.status == models.StatusConvite.ACEITO:
+    # Se o aluno quiser ACEITAR, executa as verificações ANTES de alterar o banco
+    if resposta.status == models.StatusConvite.ACEITO:
+        # VERIFICAÇÃO MOVIDA: Checa se o estudante já possui um TCC.
         existing_tcc = await crud.get_tccs_by_estudante_id(db, current_student.id)
         if existing_tcc:
-            raise HTTPException(status_code=409, detail="Conflito: Um TCC já foi criado para este estudante.")
-        
-        tcc_in = schemas.TCCCreate(
-            titulo=convite.titulo_proposto,
-            descricao=convite.descricao_proposta,
-            estudante_id=convite.estudante_id,
-        )
-        await crud.create_tcc(db=db, tcc_in=tcc_in, orientador_id=convite.professor_id)
+            raise HTTPException(status_code=409, detail="Conflito: Você já possui um TCC registrado e não pode aceitar um novo convite.")
 
-    return convite_atualizado
+        # Agora, atualiza o status do convite
+        convite_atualizado = await crud.update_convite_orientacao(db, convite=convite, update_data=resposta)
+
+        # Cria o TCC
+        tcc_in = schemas.TCCCreate(
+            titulo=convite_atualizado.titulo_proposto,
+            descricao=convite_atualizado.descricao_proposta,
+            estudante_id=convite_atualizado.estudante_id,
+        )
+        novo_tcc = await crud.create_tcc(db=db, tcc_in=tcc_in, orientador_id=convite_atualizado.professor_id)
+
+    else:  # Se o status for RECUSADO
+        convite_atualizado = await crud.update_convite_orientacao(db, convite=convite, update_data=resposta)
+
+    # Retorna o estado final no novo formato
+    return schemas.ConviteRespostaPublic(convite=convite_atualizado, tcc=novo_tcc)
+
 
 @router.get("/me/tccs", response_model=List[schemas.TCCPublic])
 async def get_my_tccs(
