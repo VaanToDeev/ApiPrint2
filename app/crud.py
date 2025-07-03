@@ -255,8 +255,10 @@ async def create_tarefa(db: AsyncSession, tarefa: schemas.TarefaCreate, tcc_id: 
     )
     db.add(db_tarefa)
     await db.commit()
-    await db.refresh(db_tarefa)
-    return db_tarefa
+    await db.refresh(db_tarefa)  # Atualiza o objeto para obter o ID gerado
+
+    # Agora, com o ID, busca a tarefa novamente para carregar relações
+    return await get_tarefa_by_id(db, db_tarefa.id)
 
 async def get_tarefa_by_id(db: AsyncSession, tarefa_id: int) -> Optional[models.Tarefa]:
     result = await db.execute(
@@ -276,8 +278,10 @@ async def update_tarefa(db: AsyncSession, tarefa: models.Tarefa, tarefa_update: 
         setattr(tarefa, key, value)
     db.add(tarefa)
     await db.commit()
-    await db.refresh(tarefa, attribute_names=['titulo', 'descricao', 'data_entrega', 'status'])
-    return tarefa
+    await db.refresh(tarefa) # Atualiza o objeto com os novos dados
+
+    # Agora, com o ID, busca a tarefa novamente para carregar relações
+    return await get_tarefa_by_id(db, tarefa.id)
 
 async def delete_tarefa(db: AsyncSession, tarefa_id: int) -> bool:
     db_tarefa = await get_tarefa_by_id(db, tarefa_id)

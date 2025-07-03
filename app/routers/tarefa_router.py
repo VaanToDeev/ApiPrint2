@@ -28,8 +28,7 @@ async def create_task_for_tcc(
     if not tcc or tcc.orientador_id != current_professor.id:
         raise HTTPException(status_code=403, detail="TCC não encontrado ou você não é o orientador.")
         
-    return await crud.create_tarefa(db=db, tarefa_in=tarefa_in, tcc_id=tcc_id)
-
+    return await crud.create_tarefa(db=db, tarefa=tarefa_in, tcc_id=tcc_id)
 # Endpoint para visualizar as tarefas de um TCC (para aluno e professor)
 @router.get("/tccs/{tcc_id}/tarefas", response_model=List[schemas.TarefaPublic])
 async def get_tasks_for_tcc(
