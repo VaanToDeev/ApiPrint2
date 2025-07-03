@@ -262,7 +262,13 @@ async def create_tarefa(db: AsyncSession, tarefa: schemas.TarefaCreate, tcc_id: 
 
 async def get_tarefa_by_id(db: AsyncSession, tarefa_id: int) -> Optional[models.Tarefa]:
     result = await db.execute(
-        select(models.Tarefa).options(selectinload(models.Tarefa.arquivos)).where(models.Tarefa.id == tarefa_id)
+        select(models.Tarefa)
+        # Adicione o selectinload para a relação 'tcc' e 'arquivos'
+        .options(
+            selectinload(models.Tarefa.tcc), 
+            selectinload(models.Tarefa.arquivos)
+        )
+        .where(models.Tarefa.id == tarefa_id)
     )
     return result.scalars().first()
 
@@ -283,10 +289,11 @@ async def update_tarefa(db: AsyncSession, tarefa: models.Tarefa, tarefa_update: 
     # Agora, com o ID, busca a tarefa novamente para carregar relações
     return await get_tarefa_by_id(db, tarefa.id)
 
-async def delete_tarefa(db: AsyncSession, tarefa_id: int) -> bool:
-    db_tarefa = await get_tarefa_by_id(db, tarefa_id)
-    if db_tarefa:
-        await db.delete(db_tarefa)
+async def delete_tarefa(db: AsyncSession, tarefa: models.Tarefa) -> bool:
+    # db_tarefa = await get_tarefa_by_id(db, tarefa_id) <<< Não precisa mais buscar
+    if tarefa:
+        await db.delete(tarefa)
         await db.commit()
         return True
     return False
+

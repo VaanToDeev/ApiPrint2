@@ -191,8 +191,9 @@ async def delete_task(
         raise HTTPException(status_code=404, detail="Tarefa não encontrada.")
     if tarefa.tcc.orientador_id != current_professor.id:
         raise HTTPException(status_code=403, detail="Você só pode deletar tarefas dos TCCs que orienta.")
-        
-    await crud.delete_tarefa(db, tarefa_id=tarefa_id)
+
+    # CORREÇÃO: Passe o objeto 'tarefa', não o 'tarefa_id'
+    await crud.delete_tarefa(db, tarefa=tarefa) # <<< MUDANÇA AQUI
     return
 
 @router.get("/tccs/{tcc_id}/tarefas", response_model=List[schemas.TarefaPublic])
