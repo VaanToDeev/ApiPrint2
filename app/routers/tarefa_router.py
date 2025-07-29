@@ -29,6 +29,7 @@ async def create_task_for_tcc(
         raise HTTPException(status_code=403, detail="TCC não encontrado ou você não é o orientador.")
         
     return await crud.create_tarefa(db=db, tarefa=tarefa_in, tcc_id=tcc_id)
+
 # Endpoint para visualizar as tarefas de um TCC (para aluno e professor)
 @router.get("/tccs/{tcc_id}/tarefas", response_model=List[schemas.TarefaPublic])
 async def get_tasks_for_tcc(
@@ -64,25 +65,47 @@ async def update_task(
         
     return await crud.update_tarefa(db=db, tarefa=tarefa, tarefa_update=tarefa_update)
 
-# Endpoint para estudante atualizar o status de uma tarefa
+# NOVO: Endpoint unificado para Professor ou Aluno alterarem o status de uma tarefa.
 @router.patch("/tarefas/{tarefa_id}/status", response_model=schemas.TarefaPublic)
-async def update_task_status_by_student(
+async def update_task_status(
     tarefa_id: int,
-    status_update: schemas.TarefaUpdate, # Reutiliza o schema, mas apenas o campo 'status' será usado
+    status_update: schemas.TarefaUpdate, # Reutiliza o schema, esperando apenas o campo 'status'.
     db: AsyncSession = Depends(get_db),
-    current_student: models.Estudante = Depends(auth.get_current_active_user)
+    current_user: models.Professor | models.Estudante = Depends(auth.get_current_active_user)
 ):
-    if not isinstance(current_student, models.Estudante):
-        raise HTTPException(status_code=403, detail="Acesso permitido apenas para estudantes.")
+    """
+    Atualiza o status de uma tarefa específica.
 
+    - **Permissão**: Acesso permitido apenas para o orientador do TCC ou o estudante do TCC.
+    - **Ação**: Altera o status da tarefa para um dos valores definidos em `StatusTarefa`.
+      (a_fazer, fazendo, revisar, feita, concluida)
+    """
     tarefa = await crud.get_tarefa_by_id(db, tarefa_id)
-    if not tarefa or tarefa.tcc.estudante_id != current_student.id:
-        raise HTTPException(status_code=403, detail="Tarefa não encontrada ou não pertence a você.")
+    if not tarefa:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tarefa não encontrada.")
 
-    # Garante que o estudante só possa atualizar o status
+    # Verifica se o usuário logado é o orientador ou o aluno do TCC ao qual a tarefa pertence.
+    is_orientador = isinstance(current_user, models.Professor) and tarefa.tcc.orientador_id == current_user.id
+    is_aluno = isinstance(current_user, models.Estudante) and tarefa.tcc.estudante_id == current_user.id
+
+    if not (is_orientador or is_aluno):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, 
+            detail="Você não tem permissão para alterar esta tarefa."
+        )
+    
+    # Validação para garantir que apenas o status seja atualizado por este endpoint
+    if status_update.status is None:
+         raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, 
+            detail="O campo 'status' é obrigatório para esta operação."
+        )
+
+    # Cria um objeto de atualização contendo apenas o status para evitar alterações indesejadas.
     update_data = schemas.TarefaUpdate(status=status_update.status)
         
-    return await crud.update_tarefa(db=db, tarefa=tarefa, tarefa_update=update_data)
+    updated_tarefa = await crud.update_tarefa(db=db, tarefa=tarefa, tarefa_update=update_data)
+    return updated_tarefa
 
 # Endpoint para professor deletar uma tarefa
 @router.delete("/tarefas/{tarefa_id}", status_code=status.HTTP_204_NO_CONTENT)

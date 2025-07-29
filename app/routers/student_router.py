@@ -23,6 +23,22 @@ async def read_student_me(
         raise HTTPException(status_code=403, detail="Not a student account")
     return current_user
 
+# NOVO: Endpoint para listar todos os professores para um aluno logado.
+@router.get("/professors", response_model=List[schemas.ProfessorPublic])
+async def list_all_professors_for_student(
+    db: AsyncSession = Depends(get_db),
+    current_student: models.Estudante = Depends(auth.get_current_active_user)
+):
+    """
+    Lista todos os professores cadastrados no sistema.
+    Acesso permitido para qualquer estudante autenticado.
+    """
+    if not isinstance(current_student, models.Estudante):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Acesso permitido apenas para estudantes.")
+    
+    professores = await crud.get_professores(db, skip=0, limit=1000) # Limite alto para buscar todos
+    return professores
+
 @router.get("/me/convites-orientacao", response_model=List[schemas.ConviteOrientacaoPublic])
 async def get_meus_convites_recebidos(
     db: AsyncSession = Depends(get_db),
@@ -53,7 +69,6 @@ async def responder_convite_orientacao(
     if not isinstance(current_student, models.Estudante):
         raise HTTPException(status_code=403, detail="Acesso permitido apenas para contas de estudante.")
 
-    # Busca o convite original
     convite = await crud.get_convite_by_id(db, convite_id)
     if not convite:
         raise HTTPException(status_code=404, detail="Convite não encontrado.")
@@ -65,31 +80,30 @@ async def responder_convite_orientacao(
         raise HTTPException(status_code=400, detail="A resposta deve ser 'aceito' ou 'recusado'.")
 
     novo_tcc = None
-    convite_atualizado = None
 
-    # Se o aluno quiser ACEITAR, executa as verificações ANTES de alterar o banco
     if resposta.status == models.StatusConvite.ACEITO:
-        # VERIFICAÇÃO MOVIDA: Checa se o estudante já possui um TCC.
         existing_tcc = await crud.get_tccs_by_estudante_id(db, current_student.id)
         if existing_tcc:
             raise HTTPException(status_code=409, detail="Conflito: Você já possui um TCC registrado e não pode aceitar um novo convite.")
 
-        # Agora, atualiza o status do convite
-        convite_atualizado = await crud.update_convite_orientacao(db, convite=convite, update_data=resposta)
+    # Atualiza o status do convite no banco de dados
+    await crud.update_convite_orientacao(db, convite=convite, update_data=resposta)
 
-        # Cria o TCC
+    # Se foi aceito, cria o TCC
+    if resposta.status == models.StatusConvite.ACEITO:
         tcc_in = schemas.TCCCreate(
-            titulo=convite_atualizado.titulo_proposto,
-            descricao=convite_atualizado.descricao_proposta,
-            estudante_id=convite_atualizado.estudante_id,
+            titulo=convite.titulo_proposto,
+            descricao=convite.descricao_proposta,
+            estudante_id=convite.estudante_id,
         )
-        novo_tcc = await crud.create_tcc(db=db, tcc_in=tcc_in, orientador_id=convite_atualizado.professor_id)
+        novo_tcc = await crud.create_tcc(db=db, tcc_in=tcc_in, orientador_id=convite.professor_id)
 
-    else:  # Se o status for RECUSADO
-        convite_atualizado = await crud.update_convite_orientacao(db, convite=convite, update_data=resposta)
+    # CORREÇÃO: Busca novamente o convite pelo ID para garantir que todos os relacionamentos
+    # (professor, estudante) sejam carregados pelo `selectinload` presente em `crud.get_convite_by_id`.
+    # Isso resolve o erro `MissingGreenlet`.
+    convite_completo = await crud.get_convite_by_id(db, convite_id)
 
-    # Retorna o estado final no novo formato
-    return schemas.ConviteRespostaPublic(convite=convite_atualizado, tcc=novo_tcc)
+    return schemas.ConviteRespostaPublic(convite=convite_completo, tcc=novo_tcc)
 
 
 @router.get("/me/tccs", response_model=List[schemas.TCCPublic])
