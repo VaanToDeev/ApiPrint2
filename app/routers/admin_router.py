@@ -16,7 +16,7 @@ async def list_students(
     skip: int = 0,
     limit: int = 100,
     db: AsyncSession = Depends(get_db),
-    current_admin: models.Professor = Depends(auth.get_current_admin_user) # Protect endpoint
+    current_admin: models.Professor = Depends(auth.get_current_admin_user)
 ):
     students = await crud.get_estudantes(db, skip=skip, limit=limit)
     return students
@@ -30,6 +30,56 @@ async def list_professors(
 ):
     professors = await crud.get_professores(db, skip=skip, limit=limit)
     return professors
+
+# NOVO: Endpoint para excluir permanentemente um estudante
+@router.delete("/users/student/{student_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_student_user(
+    student_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_admin: models.Professor = Depends(auth.get_current_admin_user)
+):
+    student_to_delete = await crud.get_estudante_by_id(db, student_id)
+    if not student_to_delete:
+        raise HTTPException(status_code=404, detail=f"Estudante com ID {student_id} não encontrado.")
+    await crud.delete_estudante(db, student_to_delete)
+    return
+
+# NOVO: Endpoint para arquivar (inativar) um estudante
+@router.patch("/users/student/{student_id}/archive", response_model=schemas.EstudantePublic)
+async def archive_student_user(
+    student_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_admin: models.Professor = Depends(auth.get_current_admin_user)
+):
+    student_to_archive = await crud.get_estudante_by_id(db, student_id)
+    if not student_to_archive:
+        raise HTTPException(status_code=404, detail=f"Estudante com ID {student_id} não encontrado.")
+    return await crud.archive_estudante(db, student_to_archive)
+
+# NOVO: Endpoint para excluir permanentemente um professor
+@router.delete("/users/professor/{professor_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_professor_user(
+    professor_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_admin: models.Professor = Depends(auth.get_current_admin_user)
+):
+    professor_to_delete = await crud.get_professor_by_id(db, professor_id)
+    if not professor_to_delete:
+        raise HTTPException(status_code=404, detail=f"Professor com ID {professor_id} não encontrado.")
+    await crud.delete_professor(db, professor_to_delete)
+    return
+
+# NOVO: Endpoint para arquivar (inativar) um professor
+@router.patch("/users/professor/{professor_id}/archive", response_model=schemas.ProfessorPublic)
+async def archive_professor_user(
+    professor_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_admin: models.Professor = Depends(auth.get_current_admin_user)
+):
+    professor_to_archive = await crud.get_professor_by_id(db, professor_id)
+    if not professor_to_archive:
+        raise HTTPException(status_code=404, detail=f"Professor com ID {professor_id} não encontrado.")
+    return await crud.archive_professor(db, professor_to_archive)
 
 @router.post("/cursos", response_model=schemas.CursoPublic, status_code=status.HTTP_201_CREATED)
 async def create_new_curso(
@@ -100,7 +150,6 @@ async def delete_curso(
     await db.commit()
     return
 
-# NOVO: Endpoint para admin enviar um arquivo geral para todos os estudantes
 @router.post("/arquivos-gerais", response_model=schemas.AdminArquivoPublic, status_code=status.HTTP_201_CREATED)
 async def upload_general_file(
     db: AsyncSession = Depends(get_db),

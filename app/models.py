@@ -15,6 +15,11 @@ class StatusEstudante(str, enum.Enum):
     ATIVO = "ativo"
     INATIVO = "inativo"
 
+# NOVO: Enum para o status do Professor
+class StatusProfessor(str, enum.Enum):
+    ATIVO = "ativo"
+    INATIVO = "inativo"
+
 class StatusTCC(str, enum.Enum):
     EM_ANDAMENTO = "em_andamento"
     CONCLUIDO = "concluido"
@@ -27,7 +32,6 @@ class StatusTarefa(str, enum.Enum):
     FEITA = "feita"
     CONCLUIDA = "concluida"
 
-# NOVO: Enum para o status do Convite de Orientação
 class StatusConvite(str, enum.Enum):
     PENDENTE = "pendente"
     ACEITO = "aceito"
@@ -44,9 +48,10 @@ class Professor(Base):
     titulacao = Column(String(100))
     telefone = Column(String(20), nullable=True)
     role = Column(SAEnum(UserRole), default=UserRole.PROFESSOR, nullable=False)
+    # NOVO: Campo de status para o professor
+    status = Column(SAEnum(StatusProfessor), default=StatusProfessor.ATIVO, nullable=False)
     curso_coordenado = relationship("Curso", back_populates="coordenador", uselist=False)
     tccs_orientados = relationship("TCC", back_populates="orientador", foreign_keys="[TCC.orientador_id]")
-    # NOVO: Relacionamento com convites enviados
     convites_enviados = relationship("OrientacaoConvite", back_populates="professor", foreign_keys="[OrientacaoConvite.professor_id]")
 
 
@@ -63,27 +68,18 @@ class Estudante(Base):
     curso_id = Column(Integer, ForeignKey("cursos.id_curso"))
     curso = relationship("Curso", back_populates="estudantes")
     tccs = relationship("TCC", back_populates="estudante", foreign_keys="[TCC.estudante_id]")
-    # NOVO: Relacionamento com convites recebidos
     convites_recebidos = relationship("OrientacaoConvite", back_populates="estudante", foreign_keys="[OrientacaoConvite.estudante_id]")
 
-# NOVO: Modelo para armazenar convites de orientação
 class OrientacaoConvite(Base):
     __tablename__ = "orientacao_convites"
     id = Column(Integer, primary_key=True, index=True)
-    
-    # Proposta de TCC
     titulo_proposto = Column(String(255), nullable=False)
     descricao_proposta = Column(Text, nullable=True)
-
-    # Status e Timestamps
     status = Column(SAEnum(StatusConvite), default=StatusConvite.PENDENTE, nullable=False)
     data_convite = Column(DateTime, default=datetime.utcnow, nullable=False)
     data_resposta = Column(DateTime, nullable=True)
-
-    # Foreign Keys e Relacionamentos
     professor_id = Column(Integer, ForeignKey("professores.id"), nullable=False)
     estudante_id = Column(Integer, ForeignKey("estudantes.id"), nullable=False)
-
     professor = relationship("Professor", back_populates="convites_enviados")
     estudante = relationship("Estudante", back_populates="convites_recebidos")
 
@@ -139,7 +135,6 @@ class TCCFile(Base):
     upload_date = Column(DateTime, default=datetime.utcnow)
     tcc = relationship("TCC", back_populates="files")
 
-# Modelo para arquivos globais enviados pelo admin
 class AdminArquivo(Base):
     __tablename__ = "admin_arquivos"
     id = Column(Integer, primary_key=True, index=True)

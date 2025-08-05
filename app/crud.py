@@ -39,9 +39,37 @@ async def get_estudantes(db: AsyncSession, skip: int = 0, limit: int = 100) -> L
     result = await db.execute(select(models.Estudante).offset(skip).limit(limit))
     return result.scalars().all()
 
+# NOVO: Função para deletar um estudante
+async def delete_estudante(db: AsyncSession, estudante: models.Estudante):
+    await db.delete(estudante)
+    await db.commit()
+
+# NOVO: Função para arquivar (inativar) um estudante
+async def archive_estudante(db: AsyncSession, estudante: models.Estudante) -> models.Estudante:
+    estudante.status = models.StatusEstudante.INATIVO
+    await db.commit()
+    await db.refresh(estudante)
+    return estudante
+
+# NOVO: Função para buscar estudantes por curso e, opcionalmente, por turma
+async def get_estudantes_by_curso_and_turma(
+    db: AsyncSession, curso_id: int, turma: Optional[str] = None
+) -> List[models.Estudante]:
+    query = select(models.Estudante).where(models.Estudante.curso_id == curso_id)
+    if turma:
+        query = query.where(models.Estudante.turma == turma)
+    result = await db.execute(query.order_by(models.Estudante.nome))
+    return result.scalars().all()
+
+
 # --- Professor CRUD ---
+# MODIFICADO: Adicionado selectinload para otimizar o carregamento do curso coordenado
 async def get_professor_by_email(db: AsyncSession, email: str) -> Optional[models.Professor]:
-    result = await db.execute(select(models.Professor).filter(models.Professor.email == email))
+    result = await db.execute(
+        select(models.Professor)
+        .options(selectinload(models.Professor.curso_coordenado))
+        .filter(models.Professor.email == email)
+    )
     return result.scalars().first()
 
 async def get_professor_by_siape(db: AsyncSession, siape: str) -> Optional[models.Professor]:
@@ -86,6 +114,18 @@ async def get_professores_by_departamento(db: AsyncSession, departamento: str):
         select(models.Professor).where(models.Professor.departamento == departamento)
     )
     return result.scalars().all()
+
+# NOVO: Função para deletar um professor
+async def delete_professor(db: AsyncSession, professor: models.Professor):
+    await db.delete(professor)
+    await db.commit()
+
+# NOVO: Função para arquivar (inativar) um professor
+async def archive_professor(db: AsyncSession, professor: models.Professor) -> models.Professor:
+    professor.status = models.StatusProfessor.INATIVO
+    await db.commit()
+    await db.refresh(professor)
+    return professor
 
 # --- Curso CRUD ---
 async def get_curso_by_id(db: AsyncSession, curso_id: int) -> Optional[models.Curso]:
@@ -255,15 +295,12 @@ async def create_tarefa(db: AsyncSession, tarefa: schemas.TarefaCreate, tcc_id: 
     )
     db.add(db_tarefa)
     await db.commit()
-    await db.refresh(db_tarefa)  # Atualiza o objeto para obter o ID gerado
-
-    # Agora, com o ID, busca a tarefa novamente para carregar relações
+    await db.refresh(db_tarefa)
     return await get_tarefa_by_id(db, db_tarefa.id)
 
 async def get_tarefa_by_id(db: AsyncSession, tarefa_id: int) -> Optional[models.Tarefa]:
     result = await db.execute(
         select(models.Tarefa)
-        # Adicione o selectinload para a relação 'tcc' e 'arquivos'
         .options(
             selectinload(models.Tarefa.tcc), 
             selectinload(models.Tarefa.arquivos)
@@ -284,26 +321,22 @@ async def update_tarefa(db: AsyncSession, tarefa: models.Tarefa, tarefa_update: 
         setattr(tarefa, key, value)
     db.add(tarefa)
     await db.commit()
-    await db.refresh(tarefa) # Atualiza o objeto com os novos dados
-
-    # Agora, com o ID, busca a tarefa novamente para carregar relações
+    await db.refresh(tarefa)
     return await get_tarefa_by_id(db, tarefa.id)
 
 async def delete_tarefa(db: AsyncSession, tarefa: models.Tarefa) -> bool:
-    # db_tarefa = await get_tarefa_by_id(db, tarefa_id) <<< Não precisa mais buscar
     if tarefa:
         await db.delete(tarefa)
         await db.commit()
         return True
     return False
 
-# --- NOVO: Admin Arquivo CRUD ---
+# --- Admin Arquivo CRUD ---
 async def create_admin_arquivo(db: AsyncSession, arquivo_in: schemas.AdminArquivoCreate) -> models.AdminArquivo:
     db_arquivo = models.AdminArquivo(**arquivo_in.model_dump())
     db.add(db_arquivo)
     await db.commit()
     await db.refresh(db_arquivo)
-    # Recarrega para obter o relacionamento 'uploader'
     return await db.get(models.AdminArquivo, db_arquivo.id, options=[selectinload(models.AdminArquivo.uploader)])
 
 async def get_admin_arquivos(db: AsyncSession, skip: int = 0, limit: int = 100) -> List[models.AdminArquivo]:

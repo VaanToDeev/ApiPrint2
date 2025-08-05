@@ -1,7 +1,7 @@
 from pydantic import BaseModel, EmailStr, Field
 from typing import Optional, List
 from datetime import datetime, date
-from app.models import UserRole, StatusEstudante, StatusTCC, StatusTarefa, StatusConvite
+from app.models import UserRole, StatusEstudante, StatusTCC, StatusTarefa, StatusConvite, StatusProfessor
 
 # --- Schemas de Autenticação e Token ---
 class Token(BaseModel):
@@ -66,6 +66,8 @@ class ProfessorPublic(UserBase):
     departamento: Optional[str] = None
     titulacao: Optional[str] = None
     role: UserRole
+    # NOVO: Campo de status no schema público
+    status: StatusProfessor
     class Config:
         from_attributes = True
 
@@ -175,7 +177,7 @@ class ConviteOrientacaoCreate(ConviteOrientacaoBase):
     estudante_id: int
 
 class ConviteOrientacaoUpdate(BaseModel):
-    status: StatusConvite # O aluno só poderá mudar para ACEITO ou RECUSADO
+    status: StatusConvite
 
 class ConviteOrientacaoPublic(ConviteOrientacaoBase):
     id: int
@@ -188,12 +190,10 @@ class ConviteOrientacaoPublic(ConviteOrientacaoBase):
     class Config:
         from_attributes = True
 
-# --- NOVO: Schema de Resposta ao Convite ---
 class ConviteRespostaPublic(BaseModel):
     convite: ConviteOrientacaoPublic
     tcc: Optional[TCCPublic] = None
 
-# --- NOVO: Schemas para Arquivos do Admin ---
 class AdminArquivoBase(BaseModel):
     nome_arquivo: str
     descricao: Optional[str] = None
