@@ -1,10 +1,16 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, File, UploadFile, Form
 from sqlalchemy.ext.asyncio import AsyncSession
 from app import schemas, crud, models, auth
 from app.database import get_db
-from typing import List
+from typing import List, Optional
+from datetime import date
+import uuid
+from pathlib import Path
 
 router = APIRouter(prefix="/professors", tags=["Professors"])
+UPLOAD_DIR = Path("uploads/tarefa_arquivos")
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+
 
 @router.get("/me", response_model=schemas.ProfessorPublic)
 async def read_professor_me(
@@ -36,31 +42,6 @@ async def list_all_students_for_professor(
     
     students = await crud.get_estudantes(db, skip=0, limit=1000) 
     return students
-
-# @router.post("/tccs/", response_model=schemas.TCCPublic, status_code=status.HTTP_201_CREATED)
-# async def create_tcc_for_student(
-#     tcc_in: schemas.TCCCreate,
-#     db: AsyncSession = Depends(get_db),
-#     current_professor: models.Professor = Depends(auth.get_current_active_user)
-# ):
-#     """
-#     DEPRECATED: This endpoint is replaced by the invitation flow.
-#     A TCC is now created only after a student accepts an invitation.
-#     """
-#     if not isinstance(current_professor, models.Professor):
-#         raise HTTPException(status_code=403, detail="Apenas professores podem criar TCCs.")
-
-#     student = await crud.get_estudante_by_id(db, tcc_in.estudante_id)
-#     if not student:
-#         raise HTTPException(status_code=404, detail=f"Estudante com ID {tcc_in.estudante_id} não encontrado.")
-
-#     orientador_id = current_professor.id
-    
-#     existing_tccs = await crud.get_tccs_by_estudante_id(db, tcc_in.estudante_id)
-#     if existing_tccs:
-#         raise HTTPException(status_code=400, detail="Este estudante já possui um TCC registrado.")
-
-#     return await crud.create_tcc(db=db, tcc_in=tcc_in, orientador_id=orientador_id)
 
 @router.post("/me/convites-orientacao", response_model=schemas.ConviteOrientacaoPublic, status_code=status.HTTP_201_CREATED)
 async def convidar_aluno_para_orientacao(
@@ -141,12 +122,16 @@ async def get_orientandos(
     orientandos = await crud.get_orientandos_by_professor_id(db, current_user.id)
     return orientandos
 
+# MODIFICADO: Agora aceita um arquivo opcional ao criar a tarefa.
 @router.post("/tccs/{tcc_id}/tarefas", response_model=schemas.TarefaPublic, status_code=status.HTTP_201_CREATED)
 async def create_task_for_tcc(
     tcc_id: int,
-    tarefa_in: schemas.TarefaCreate,
     db: AsyncSession = Depends(get_db),
-    current_professor: models.Professor = Depends(auth.get_current_active_user)
+    current_professor: models.Professor = Depends(auth.get_current_active_user),
+    titulo: str = Form(...),
+    descricao: Optional[str] = Form(None),
+    data_entrega: Optional[date] = Form(None),
+    file: Optional[UploadFile] = File(None)
 ):
     if not isinstance(current_professor, models.Professor):
         raise HTTPException(status_code=403, detail="Acesso permitido apenas para professores.")
@@ -156,8 +141,30 @@ async def create_task_for_tcc(
         raise HTTPException(status_code=404, detail="TCC não encontrado.")
     if tcc.orientador_id != current_professor.id:
         raise HTTPException(status_code=403, detail="Você só pode criar tarefas para os TCCs que orienta.")
+    
+    tarefa_in = schemas.TarefaCreate(titulo=titulo, descricao=descricao, data_entrega=data_entrega)
+    nova_tarefa = await crud.create_tarefa(db=db, tarefa=tarefa_in, tcc_id=tcc_id)
+    
+    if file:
+        unique_filename = f"{uuid.uuid4()}_{file.filename}"
+        file_path = UPLOAD_DIR / unique_filename
         
-    return await crud.create_tarefa(db=db, tarefa=tarefa_in, tcc_id=tcc_id)
+        try:
+            with open(file_path, "wb") as buffer:
+                buffer.write(await file.read())
+        except Exception as e:
+            # Em caso de falha no upload, a tarefa já foi criada.
+            # O ideal seria uma transação completa, mas por simplicidade,
+            # deixamos a tarefa criada e o professor pode adicionar o arquivo depois.
+            raise HTTPException(status_code=500, detail=f"Tarefa criada, mas não foi possível salvar o arquivo: {e}")
+
+        arquivo_in = schemas.ArquivoCreate(nome_arquivo=file.filename, caminho_arquivo=str(file_path))
+        await crud.create_arquivo(db, arquivo=arquivo_in, tarefa_id=nova_tarefa.id)
+
+    # Recarrega a tarefa para incluir o novo arquivo na resposta
+    tarefa_completa = await crud.get_tarefa_by_id(db, nova_tarefa.id)
+    return tarefa_completa
+
 
 @router.put("/tarefas/{tarefa_id}", response_model=schemas.TarefaPublic)
 async def update_task(
@@ -192,24 +199,38 @@ async def delete_task(
     if tarefa.tcc.orientador_id != current_professor.id:
         raise HTTPException(status_code=403, detail="Você só pode deletar tarefas dos TCCs que orienta.")
 
-    # CORREÇÃO: Passe o objeto 'tarefa', não o 'tarefa_id'
-    await crud.delete_tarefa(db, tarefa=tarefa) # <<< MUDANÇA AQUI
+    await crud.delete_tarefa(db, tarefa=tarefa)
     return
 
-@router.get("/tccs/{tcc_id}/tarefas", response_model=List[schemas.TarefaPublic])
-async def get_tasks_for_tcc(
-    tcc_id: int,
+# NOVO: Endpoint para professor enviar arquivo para uma tarefa existente
+@router.post("/tarefas/{tarefa_id}/arquivos", response_model=schemas.ArquivoPublic, status_code=status.HTTP_201_CREATED)
+async def professor_upload_file_for_task(
+    tarefa_id: int,
+    file: UploadFile = File(...),
     db: AsyncSession = Depends(get_db),
-    current_user: models.Professor | models.Estudante = Depends(auth.get_current_active_user)
+    current_professor: models.Professor = Depends(auth.get_current_active_user)
 ):
-    tcc = await crud.get_tcc_by_id(db, tcc_id)
-    if not tcc:
-        raise HTTPException(status_code=404, detail="TCC não encontrado.")
+    if not isinstance(current_professor, models.Professor):
+        raise HTTPException(status_code=403, detail="Acesso permitido apenas para professores.")
+
+    tarefa = await crud.get_tarefa_by_id(db, tarefa_id)
+    if not tarefa:
+        raise HTTPException(status_code=404, detail="Tarefa não encontrada.")
+    if tarefa.tcc.orientador_id != current_professor.id:
+        raise HTTPException(status_code=403, detail="Você só pode enviar arquivos para tarefas dos TCCs que orienta.")
+
+    unique_filename = f"{uuid.uuid4()}_{file.filename}"
+    file_path = UPLOAD_DIR / unique_filename
     
-    is_orientador = isinstance(current_user, models.Professor) and tcc.orientador_id == current_user.id
-    is_aluno = isinstance(current_user, models.Estudante) and tcc.estudante_id == current_user.id
+    try:
+        with open(file_path, "wb") as buffer:
+            buffer.write(await file.read())
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Não foi possível salvar o arquivo: {e}")
+
+    arquivo_in = schemas.ArquivoCreate(
+        nome_arquivo=file.filename,
+        caminho_arquivo=str(file_path)
+    )
     
-    if not (is_orientador or is_aluno):
-        raise HTTPException(status_code=403, detail="Você não tem permissão para visualizar as tarefas deste TCC.")
-        
-    return await crud.get_tarefas_by_tcc_id(db, tcc_id=tcc_id)
+    return await crud.create_arquivo(db=db, arquivo=arquivo_in, tarefa_id=tarefa_id)

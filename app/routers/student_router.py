@@ -98,9 +98,6 @@ async def responder_convite_orientacao(
         )
         novo_tcc = await crud.create_tcc(db=db, tcc_in=tcc_in, orientador_id=convite.professor_id)
 
-    # CORREÇÃO: Busca novamente o convite pelo ID para garantir que todos os relacionamentos
-    # (professor, estudante) sejam carregados pelo `selectinload` presente em `crud.get_convite_by_id`.
-    # Isso resolve o erro `MissingGreenlet`.
     convite_completo = await crud.get_convite_by_id(db, convite_id)
 
     return schemas.ConviteRespostaPublic(convite=convite_completo, tcc=novo_tcc)
@@ -227,3 +224,17 @@ async def upload_file_for_task(
     await crud.update_tarefa(db, tarefa, schemas.TarefaUpdate(status=models.StatusTarefa.FEITA))
     
     return await crud.create_arquivo(db, arquivo=arquivo_in, tarefa_id=tarefa_id)
+
+# NOVO: Endpoint para estudante listar os arquivos gerais enviados pelo admin
+@router.get("/arquivos-gerais", response_model=List[schemas.AdminArquivoPublic])
+async def get_general_files(
+    db: AsyncSession = Depends(get_db),
+    current_student: models.Estudante = Depends(auth.get_current_active_user),
+    skip: int = 0,
+    limit: int = 100
+):
+    if not isinstance(current_student, models.Estudante):
+        raise HTTPException(status_code=403, detail="Acesso permitido apenas para estudantes.")
+    
+    arquivos = await crud.get_admin_arquivos(db, skip=skip, limit=limit)
+    return arquivos

@@ -138,3 +138,14 @@ class TCCFile(Base):
     filetype = Column(String(100), nullable=False)
     upload_date = Column(DateTime, default=datetime.utcnow)
     tcc = relationship("TCC", back_populates="files")
+
+# Modelo para arquivos globais enviados pelo admin
+class AdminArquivo(Base):
+    __tablename__ = "admin_arquivos"
+    id = Column(Integer, primary_key=True, index=True)
+    nome_arquivo = Column(String(255), nullable=False)
+    caminho_arquivo = Column(String(512), nullable=False)
+    descricao = Column(Text, nullable=True)
+    data_upload = Column(DateTime, default=datetime.utcnow, nullable=False)
+    uploader_id = Column(Integer, ForeignKey("professores.id"), nullable=False)
+    uploader = relationship("Professor")

@@ -192,3 +192,21 @@ class ConviteOrientacaoPublic(ConviteOrientacaoBase):
 class ConviteRespostaPublic(BaseModel):
     convite: ConviteOrientacaoPublic
     tcc: Optional[TCCPublic] = None
+
+# --- NOVO: Schemas para Arquivos do Admin ---
+class AdminArquivoBase(BaseModel):
+    nome_arquivo: str
+    descricao: Optional[str] = None
+
+class AdminArquivoCreate(AdminArquivoBase):
+    caminho_arquivo: str
+    uploader_id: int
+
+class AdminArquivoPublic(AdminArquivoBase):
+    id: int
+    caminho_arquivo: str
+    data_upload: datetime
+    uploader: ProfessorPublic
+
+    class Config:
+        from_attributes = True

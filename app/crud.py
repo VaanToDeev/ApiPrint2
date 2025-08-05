@@ -297,3 +297,21 @@ async def delete_tarefa(db: AsyncSession, tarefa: models.Tarefa) -> bool:
         return True
     return False
 
+# --- NOVO: Admin Arquivo CRUD ---
+async def create_admin_arquivo(db: AsyncSession, arquivo_in: schemas.AdminArquivoCreate) -> models.AdminArquivo:
+    db_arquivo = models.AdminArquivo(**arquivo_in.model_dump())
+    db.add(db_arquivo)
+    await db.commit()
+    await db.refresh(db_arquivo)
+    # Recarrega para obter o relacionamento 'uploader'
+    return await db.get(models.AdminArquivo, db_arquivo.id, options=[selectinload(models.AdminArquivo.uploader)])
+
+async def get_admin_arquivos(db: AsyncSession, skip: int = 0, limit: int = 100) -> List[models.AdminArquivo]:
+    result = await db.execute(
+        select(models.AdminArquivo)
+        .options(selectinload(models.AdminArquivo.uploader))
+        .offset(skip)
+        .limit(limit)
+        .order_by(models.AdminArquivo.data_upload.desc())
+    )
+    return result.scalars().all()
